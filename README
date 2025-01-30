@@ -1,4 +1,4 @@
-Extends the excellent OpenCPN project with the ability ro act as a WMS server.
+Extends the excellent OpenCPN project with the ability to act as a WMS server.
 
 Remember NOT to use any charts that you don't have legal access to.
 Rendering speed is limited, if you need fast rendering then use one of the 
