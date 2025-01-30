@@ -43,22 +43,25 @@ TODO: It is not updated yet to reflect ideal conditions
 		const ImageWMS = window.ol.source.ImageWMS;
 		const OSM = window.ol.source.OSM;
 
-		//let saabol_vectorlayer = {};
+		//Santa Catalina 33.347197, -118.322057
+
+
+
 		document.saabol_vectorsource = new window.ol.source.Vector();
-		const LAT = 54.9103;
-		const LON = 9.77;
-		const ZOOM = 15
+		const LAT = 33.35;
+		const LON = -118.3;
+		const ZOOM = 13
 
 		//simple converter https://applications.pgc.umn.edu/convert/
 		let objs = [
 			{
-				"lat": 54.9003,
-				"lon": 9.7850666667,
+				"lat": 33.35,
+				"lon": -118.3,
 				"dia": 200
 			},
 			{
-				"lat": 54.901083,
-				"lon": 9.714583,
+				"lat": 33.40,
+				"lon": -118.35,
 				"dia": 100
 			},
 		]
@@ -150,8 +153,6 @@ TODO: It is not updated yet to reflect ideal conditions
 
 			//openlayers rendering
 			if (enable_opencpn_openlayers) {
-				//vectorLayer.setZIndex(2);
-				
 
 				//iterate objects and add them
 				for (let i = 0; i < objs.length; i++) {
@@ -162,17 +163,17 @@ TODO: It is not updated yet to reflect ideal conditions
 					var circleFeature = new ol.Feature(circle);
 					document.saabol_vectorsource.addFeature(circleFeature);
 				}
-
-				//X: 1089038.5784305953 9°46'58.8"
-				//Y: 7344284.029245517  54°54'33.5"
 				
-				//https://epsg.io/map#srs=3857&x=1089074.779007&y=7344197.072492&z=14&layer=streets
+				//https://epsg.io/map#srs=3857&x=-13171437.621531&y=3941583.648538&z=13&layer=streets
+				
+				
+				-13171437.621531, 3941583.648538
 
 
 				//1089074.779007 7344197.072492
 
 				//var center = new ol.geom.Point(1089074.779007, 7344197.072492 ); // Convert to map projection
-				var center = [1089074.779007, 7344197.072492 ]; // Convert to map projection
+				var center = [1-13171437.621531, 3941583.648538]; // Convert to map projection
 				var circle = new ol.geom.Circle(center, 500);
 				var circleFeature = new ol.Feature(circle);
 				document.saabol_vectorsource.addFeature(circleFeature);
