@@ -225,6 +225,7 @@ extern int g_detailslider_dialog_x, g_detailslider_dialog_y;
 
 extern bool g_bUseGreenShip;
 
+extern int g_OwnShipmmsi;
 extern int g_OwnShipIconType;
 extern double g_n_ownship_length_meters;
 extern double g_n_ownship_beam_meters;
@@ -833,6 +834,8 @@ int MyConfig::LoadMyConfigRaw(bool bAsTemplate) {
   Read("CatalogCustomURL", &g_catalog_custom_url);
   Read("CatalogChannel", &g_catalog_channel);
 
+  Read("NetmaskBits", &g_netmask_bits);
+
   //  NMEA connection options.
   if (!bAsTemplate) {
     Read(_T ( "FilterNMEA_Avg" ), &g_bfilter_cogsog);
@@ -987,6 +990,7 @@ int MyConfig::LoadMyConfigRaw(bool bAsTemplate) {
   Read(_T ( "OwnshipHDTPredictorWidth" ), &g_ownship_HDTpredictor_width);
   Read(_T ( "OwnshipHDTPredictorMiles" ), &g_ownship_HDTpredictor_miles);
 
+  Read(_T ( "OwnShipMMSINumber" ), &g_OwnShipmmsi);
   Read(_T ( "OwnShipIconType" ), &g_OwnShipIconType);
   Read(_T ( "OwnShipLength" ), &g_n_ownship_length_meters);
   Read(_T ( "OwnShipWidth" ), &g_n_ownship_beam_meters);
@@ -2415,6 +2419,7 @@ void MyConfig::UpdateSettings() {
   Write(_T( "CatalogCustomURL"), g_catalog_custom_url);
   Write(_T( "CatalogChannel"), g_catalog_channel);
 
+  Write("NetmaskBits", g_netmask_bits);
   Write(_T ( "FilterNMEA_Avg" ), g_bfilter_cogsog);
   Write(_T ( "FilterNMEA_Sec" ), g_COGFilterSec);
 
@@ -2475,6 +2480,7 @@ void MyConfig::UpdateSettings() {
   Write(_T ( "OwnshipHDTPredictorColor" ), g_ownship_HDTpredictor_color);
   Write(_T ( "OwnshipHDTPredictorEndmarker" ),
         g_ownship_HDTpredictor_endmarker);
+  Write(_T ( "OwnShipMMSINumber" ), g_OwnShipmmsi);
   Write(_T ( "OwnshipHDTPredictorWidth" ), g_ownship_HDTpredictor_width);
   Write(_T ( "OwnshipHDTPredictorMiles" ), g_ownship_HDTpredictor_miles);
 
@@ -3379,6 +3385,58 @@ bool LogMessageOnce(const wxString &msg) {
 /**************************************************************************/
 /*          Some assorted utilities                                       */
 /**************************************************************************/
+
+wxDateTime toUsrDateTime(const wxDateTime ts, const int format,
+                         const double lon) {
+  if (!ts.IsValid()) {
+    return ts;
+  }
+  wxDateTime dt;
+  switch (format) {
+    case LMTINPUT:  // LMT@Location
+      if (std::isnan(lon)) {
+        dt = wxInvalidDateTime;
+      } else {
+        dt =
+            ts.Add(wxTimeSpan(wxTimeSpan(0, 0, wxLongLong(lon * 3600. / 15.))));
+      }
+      break;
+    case LTINPUT:  // Local@PC
+      // Convert date/time from UTC to local time.
+      dt = ts.FromUTC();
+      break;
+    case UTCINPUT:  // UTC
+      // The date/time is already in UTC.
+      dt = ts;
+      break;
+  }
+  return dt;
+}
+
+wxDateTime fromUsrDateTime(const wxDateTime ts, const int format,
+                           const double lon) {
+  if (!ts.IsValid()) {
+    return ts;
+  }
+  wxDateTime dt;
+  switch (format) {
+    case LMTINPUT:  // LMT@Location
+      if (std::isnan(lon)) {
+        dt = wxInvalidDateTime;
+      } else {
+        dt = ts.Subtract(wxTimeSpan(0, 0, wxLongLong(lon * 3600. / 15.)));
+      }
+      break;
+    case LTINPUT:  // Local@PC
+      // The input date/time is in local time, so convert it to UTC.
+      dt = ts.ToUTC();
+      break;
+    case UTCINPUT:  // UTC
+      dt = ts;
+      break;
+  }
+  return dt;
+}
 
 /**************************************************************************/
 /*          Converts the distance from the units selected by user to NMi  */

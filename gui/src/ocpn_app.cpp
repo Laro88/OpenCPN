@@ -481,7 +481,27 @@ bool g_bLookAhead;
 bool g_bskew_comp;
 bool g_bopengl;
 bool g_bSoftwareGL;
+/**
+ * Controls how the chart panning and zooming smoothing is done during user
+ * interactions.
+ *
+ * When enabled (true):
+ * - Chart panning has inertia, with smooth acceleration and deceleration
+ * - Mouse wheel zooming is smoothly animated between zoom levels
+ * - Chart overscaled rendering is optimized for smooth transitions
+ * - Chart quilting transitions may be smoother
+ *
+ * When disabled (false):
+ * - Chart panning stops immediately when mouse is released
+ * - Mouse wheel zooming jumps directly between zoom levels without animation
+ * - Rendering may be slightly faster but less visually polished
+ *
+ * Changed through the Display > Advanced > "Smooth Panning/Zooming" checkbox.
+ * Saved to config as user preference.
+ */
 bool g_bsmoothpanzoom;
+// toggle for smooth position jumping
+bool g_bSmoothRecenter = true;
 bool g_fog_overzoom;
 double g_overzoom_emphasis_base;
 bool g_oz_vector_scale;
@@ -681,7 +701,6 @@ ChartCanvas *g_focusCanvas;
 ChartCanvas *g_overlayCanvas;
 
 bool b_inCloseWindow;
-extern int ShowNavWarning();
 bool g_disable_main_toolbar;
 bool g_btenhertz;
 
@@ -1131,13 +1150,15 @@ bool MyApp::OnInit() {
   temp_font.SetDefaultEncoding(wxFONTENCODING_SYSTEM);
 
   //      Establish Log File location
-  if (!g_Platform->InitializeLogFile()) return false;
+  if (!g_Platform->InitializeLogFile()) {
+    return false;
+  };
 
 #ifdef __WXMSW__
 
-    //  Un-comment the following to establish a separate console window as a
-    //  target for printf() in Windows
-    //     RedirectIOToConsole();
+  //  Un-comment the following to establish a separate console window as a
+  //  target for printf() in Windows
+  //     RedirectIOToConsole();
 
 #endif
 
@@ -1357,10 +1378,12 @@ bool MyApp::OnInit() {
   }
 
   //  Is this the first run after a clean installation?
-  if (!n_NavMessageShown) g_bFirstRun = true;
+  if (!n_NavMessageShown) {
+    g_bFirstRun = true;
+  }
 
-    //  Now we can set the locale
-    //    using wxWidgets/gettext methodology....
+  //  Now we can set the locale
+  //    using wxWidgets/gettext methodology....
 
 #if wxUSE_XLOCALE || !wxCHECK_VERSION(3, 0, 0)
 
@@ -1423,10 +1446,11 @@ bool MyApp::OnInit() {
   g_Platform->SetUpgradeOptions(vs, g_config_version_string);
 
   //  log deferred log restart message, if it exists.
-  if (!g_Platform->GetLargeLogMessage().IsEmpty())
+  if (!g_Platform->GetLargeLogMessage().IsEmpty()) {
     wxLogMessage(g_Platform->GetLargeLogMessage());
+  }
 
-    // Validate OpenGL functionality, if selected
+  // Validate OpenGL functionality, if selected
 #ifndef ocpnUSE_GL
   g_bdisable_opengl = true;
   ;
@@ -1435,17 +1459,19 @@ bool MyApp::OnInit() {
   if (g_bdisable_opengl) g_bopengl = false;
 
 #if defined(__linux__) && !defined(__ANDROID__)
-  if (g_bSoftwareGL) setenv("LIBGL_ALWAYS_SOFTWARE", "1", 1);
+  if (g_bSoftwareGL) {
+    setenv("LIBGL_ALWAYS_SOFTWARE", "1", 1);
+  }
 #endif
 
-    // FIXMW (dave) move to frame
-    // g_bTransparentToolbarInOpenGLOK = isTransparentToolbarInOpenGLOK();
+  // FIXMW (dave) move to frame
+  // g_bTransparentToolbarInOpenGLOK = isTransparentToolbarInOpenGLOK();
 
-    // On Windows platforms, establish a default cache managment policy
-    // as allowing OpenCPN a percentage of available physical memory,
-    // not to exceed 1 GB
-    // Note that this logic implies that Windows platforms always use
-    // the memCacheLimit policy, and never use the fallback nCacheLimit policy
+  // On Windows platforms, establish a default cache managment policy
+  // as allowing OpenCPN a percentage of available physical memory,
+  // not to exceed 1 GB
+  // Note that this logic implies that Windows platforms always use
+  // the memCacheLimit policy, and never use the fallback nCacheLimit policy
 #ifdef __WXMSW__
   if (0 == g_memCacheLimit) g_memCacheLimit = (int)(g_mem_total * 0.5);
   g_memCacheLimit =
@@ -1889,7 +1915,7 @@ bool MyApp::OnInit() {
     // qDebug() << "Showing NavWarning";
     wxMilliSleep(500);
 
-    if (wxID_CANCEL == ShowNavWarning()) {
+    if (!ShowNavWarning()) {
       qDebug() << "Closing due to NavWarning Cancel";
       gFrame->Close();
       androidTerminate();
@@ -1907,7 +1933,7 @@ bool MyApp::OnInit() {
   //  or if the version string has changed at all
   //  We defer until here to allow for localization of the message
   if (!n_NavMessageShown || (vs != g_config_version_string)) {
-    if (wxID_CANCEL == ShowNavWarning()) return false;
+    if (!ShowNavWarning()) return false;
     n_NavMessageShown = 1;
     pConfig->Flush();
   }
@@ -2083,12 +2109,14 @@ int MyApp::OnExit() {
 #ifdef __WXMSW__
 #ifdef USE_GLU_TESS
 #ifdef USE_GLU_DLL
-  if (s_glu_dll_ready) FreeLibrary(s_hGLU_DLL);  // free the glu32.dll
+  if (s_glu_dll_ready) {
+    FreeLibrary(s_hGLU_DLL);
+  }  // free the glu32.dll
 #endif
 #endif
 #endif
 
-    // Restore any changed system colors
+  // Restore any changed system colors
 
 #ifdef __WXMSW__
   void RestoreSystemColors(void);

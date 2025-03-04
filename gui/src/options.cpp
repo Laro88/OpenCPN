@@ -197,6 +197,7 @@ extern bool g_bFullscreenToolbar;
 extern bool g_bTransparentToolbar;
 extern bool g_bTransparentToolbarInOpenGLOK;
 
+extern int g_OwnShipmmsi;
 extern int g_OwnShipIconType;
 extern double g_n_ownship_length_meters;
 extern double g_n_ownship_beam_meters;
@@ -716,8 +717,11 @@ public:
 
   virtual ~OCPNCheckedListCtrl() {}
 
-  unsigned int Append(wxString& label, bool benable = true);
+  unsigned int Append(wxString& label, bool benable = true,
+                      bool bsizerLayout = true);
   unsigned int GetCount() { return m_list.GetCount(); }
+
+  void RunLayout();
 
   void Clear();
   void Check(int index, bool val);
@@ -749,12 +753,13 @@ bool OCPNCheckedListCtrl::Create(wxWindow* parent, wxWindowID id,
   return TRUE;
 }
 
-unsigned int OCPNCheckedListCtrl::Append(wxString& label, bool benable) {
+unsigned int OCPNCheckedListCtrl::Append(wxString& label, bool benable,
+                                         bool bsizerLayout) {
   wxCheckBox* cb = new wxCheckBox(this, wxID_ANY, label);
   cb->Enable(benable);
   cb->SetValue(!benable);
   m_sizer->Add(cb);
-  m_sizer->Layout();
+  if (bsizerLayout) m_sizer->Layout();
 
   m_list.Append(cb);
 
@@ -778,12 +783,10 @@ bool OCPNCheckedListCtrl::IsChecked(int index) {
     return false;
 }
 
+void OCPNCheckedListCtrl::RunLayout() { m_sizer->Layout(); }
+
 void OCPNCheckedListCtrl::Clear() {
-  for (unsigned int i = 0; i < m_list.GetCount(); i++) {
-    wxCheckBox* cb = m_list[i];
-    delete cb;
-  }
-  m_list.Clear();
+  WX_CLEAR_LIST(CBList, m_list);
   Scroll(0, 0);
 }
 
@@ -1472,6 +1475,7 @@ EVT_BUTTON(ID_APPLY, options::OnApplyClick)
 EVT_BUTTON(xID_OK, options::OnXidOkClick)
 EVT_BUTTON(wxID_CANCEL, options::OnCancelClick)
 EVT_BUTTON(ID_BUTTONFONTCHOOSE, options::OnChooseFont)
+EVT_BUTTON(ID_BUTTONFONT_RESET, options::OnResetFont)
 EVT_BUTTON(ID_BUTTONECDISHELP, options::OnButtonEcdisHelp)
 
 EVT_CHOICE(ID_CHOICE_FONTELEMENT, options::OnFontChoice)
@@ -2045,6 +2049,34 @@ void options::CreatePanel_Ownship(size_t parent, int border_size,
                    LineColorNChoices, m_LineColorChoices, 0);
   m_shipToActiveColor->SetSelection(0);
   shipToActiveGrid->Add(m_shipToActiveColor, 0, wxALL, 5);
+
+  // Ship's data
+  wxStaticBox* shipdata =
+      new wxStaticBox(itemPanelShip, wxID_ANY, _("Ship's identifier"));
+  wxStaticBoxSizer* datasizer = new wxStaticBoxSizer(shipdata, wxVERTICAL);
+  ownShip->Add(datasizer, 0, wxGROW | wxALL, border_size);
+
+  wxFlexGridSizer* ownmmsisizer =
+      new wxFlexGridSizer(0, 2, group_item_spacing, group_item_spacing);
+  ownmmsisizer->AddGrowableCol(1);
+  datasizer->Add(ownmmsisizer, 0, wxALL | wxEXPAND, border_size);
+
+  // Enter own ship mmsi for a AIS transponder connection.
+  // Especially N2k devices may lack that info.
+  wxStaticText* pStatic_ownshipmmsi =
+      new wxStaticText(itemPanelShip, wxID_ANY,
+                       _("Own ship's MMSI. (If available) Nine digits"));
+  ownmmsisizer->Add(pStatic_ownshipmmsi, 0);
+
+  // Make a rule for mmsi txt control input
+  const wxString AllowDigits[] = {"0", "1", "2", "3", "4",
+                                  "5", "6", "7", "8", "9"};
+  wxArrayString ArrayAllowDigits(10, AllowDigits);
+  wxTextValidator mmsiVal(wxFILTER_INCLUDE_CHAR_LIST);
+  mmsiVal.SetIncludes(ArrayAllowDigits);
+  m_pTxt_OwnMMSI = new wxTextCtrl(itemPanelShip, wxID_ANY, "",
+                                  wxDefaultPosition, wxDefaultSize, 0, mmsiVal);
+  ownmmsisizer->Add(m_pTxt_OwnMMSI, 0, wxALIGN_RIGHT);
 
   //  Tracks
   wxStaticBox* trackText =
@@ -4674,7 +4706,7 @@ OCPNSoundPanel::OCPNSoundPanel(wxWindow* parent, wxWindowID id,
                                wxString title, wxString checkLegend,
                                wxString selectLegend, wxString* pSoundFile)
     : wxPanel(parent, id, pos, size, wxBORDER_NONE), m_soundPlaying(false) {
-  wxFont* pif = FontMgr::Get().GetFont(_T("Dialog"));
+  wxFont* pif = FontMgr::Get().GetFont(_("Dialog"));
   SetFont(*pif);
 
   m_pSoundFile = pSoundFile;
@@ -5311,16 +5343,12 @@ void options::CreatePanel_UI(size_t parent, int border_size,
       new wxChoice(itemPanelFont, ID_CHOICE_FONTELEMENT, wxDefaultPosition,
                    fontChoiceSize, 0, NULL, wxCB_SORT);
 
-  int nFonts = FontMgr::Get().GetNumFonts();
-  for (int it = 0; it < nFonts; it++) {
-    const wxString& t = FontMgr::Get().GetDialogString(it);
-
-    if (FontMgr::Get().GetConfigString(it).StartsWith(g_locale)) {
-      m_itemFontElementListBox->Append(t);
-    }
+  wxArrayString uniqueStrings = FontMgr::Get().GetDialogStrings(g_locale);
+  for (size_t i = 0; i < uniqueStrings.GetCount(); i++) {
+    m_itemFontElementListBox->Append(uniqueStrings[i]);
   }
 
-  if (nFonts) m_itemFontElementListBox->SetSelection(0);
+  if (uniqueStrings.GetCount()) m_itemFontElementListBox->SetSelection(0);
 
   itemFontStaticBoxSizer->Add(m_itemFontElementListBox, 0, wxALL, border_size);
 
@@ -5334,6 +5362,11 @@ void options::CreatePanel_UI(size_t parent, int border_size,
                    wxDefaultPosition, wxDefaultSize, 0);
   itemFontStaticBoxSizer->Add(itemFontColorButton, 0, wxALL, border_size);
 #endif
+  wxButton* itemFontResetButton =
+      new wxButton(itemPanelFont, ID_BUTTONFONT_RESET, _("Reset to Default"),
+                   wxDefaultPosition, wxDefaultSize, 0);
+  itemFontStaticBoxSizer->Add(itemFontResetButton, 0, wxALL, border_size);
+
   m_textSample = new wxStaticText(itemPanelFont, wxID_ANY, _("Sample"),
                                   wxDefaultPosition, wxDefaultSize, 0);
   itemFontStaticBoxSizer->Add(m_textSample, 0, wxALL, border_size);
@@ -5543,6 +5576,30 @@ void options::CreatePanel_UI(size_t parent, int border_size,
 
   miscOptions->Add(sliderSizer, 0, wxEXPAND, 5);
   miscOptions->AddSpacer(20);
+}
+
+void options::OnResetFont(wxCommandEvent& event) {
+  wxString itemElement;
+  int i = m_itemFontElementListBox->GetSelection();
+  if (i >= 0) {
+    itemElement = m_itemFontElementListBox->GetString(i);
+
+    if (FontMgr::Get().ResetFontToDefault(itemElement)) {
+      // Update the sample text with new default font
+      wxFont* pFont = FontMgr::Get().GetFont(itemElement);
+      wxColour colour = FontMgr::Get().GetFontColor(itemElement);
+
+      if (pFont) {
+        m_textSample->SetFont(*pFont);
+        m_textSample->SetForegroundColour(colour);
+        m_textSample->Refresh();
+      }
+      // Force immediate update of UI elements
+      gFrame->UpdateAllFonts();
+      m_bfontChanged = true;
+      OnFontChoice(event);
+    }
+  }
 }
 
 void options::OnAlertEnableButtonClick(wxCommandEvent& event) {
@@ -6087,6 +6144,12 @@ void options::SetInitialSettings(void) {
     s.Printf(_T("%4.0f"), g_ownship_HDTpredictor_miles);
   m_pText_OSHDT_Predictor->SetValue(s);
 
+  if (g_OwnShipmmsi > 0) {
+    wxString s = wxString::Format("%i", g_OwnShipmmsi);
+    m_pTxt_OwnMMSI->SetValue(s);
+  } else
+    m_pTxt_OwnMMSI->SetValue("");
+
   m_pShipIconType->SetSelection(g_OwnShipIconType);
   wxCommandEvent eDummy;
   OnShipTypeSelect(eDummy);
@@ -6345,7 +6408,7 @@ void options::resetMarStdList(bool bsetConfig, bool bsetStd) {
       // The ListBox control will insert entries in sorted order, which means
       // we need to
       // keep track of already inserted items that gets pushed down the line.
-      int newpos = ps57CtlListBox->Append(item, benable);
+      int newpos = ps57CtlListBox->Append(item, benable, false);
       marinersStdXref.push_back(newpos);
       for (size_t i = 0; i < iPtr; i++) {
         if (marinersStdXref[i] >= newpos) marinersStdXref[i]++;
@@ -6364,6 +6427,10 @@ void options::resetMarStdList(bool bsetConfig, bool bsetStd) {
 
       ps57CtlListBox->Check(newpos, bviz);
     }
+
+    // Deferred layout instead of after every appended checkbox
+    ps57CtlListBox->RunLayout();
+
     //  Force the wxScrolledWindow to recalculate its scroll bars
     wxSize s = ps57CtlListBox->GetSize();
     ps57CtlListBox->SetSize(s.x, s.y - 1);
@@ -6410,8 +6477,10 @@ void options::SetInitialVectorSettings(void) {
     for (unsigned int i = 0; i < g_canvasArray.GetCount(); i++) {
       ChartCanvas* cc = g_canvasArray.Item(i);
       if (cc) {
-        if (cc->GetENCDisplayCategory() == MARINERS_STANDARD)
+        if (cc->GetENCDisplayCategory() == MARINERS_STANDARD) {
           benableMarStd = true;
+          break;
+        }
       }
     }
 
@@ -7021,6 +7090,7 @@ void options::ApplyChanges(wxCommandEvent& event) {
     gVar = g_UserVar;
   }
 
+  g_OwnShipmmsi = wxAtoi(m_pTxt_OwnMMSI->GetValue());
   m_pText_OSCOG_Predictor->GetValue().ToDouble(&g_ownship_predictor_minutes);
   m_pText_OSHDT_Predictor->GetValue().ToDouble(&g_ownship_HDTpredictor_miles);
 
@@ -7233,12 +7303,13 @@ void options::ApplyChanges(wxCommandEvent& event) {
       MouseZoom::ui_to_config(g_mouse_zoom_sensitivity_ui);
 
   //  Only reload the icons if user has actually visted the UI page
-  if (m_bVisitLang)
+  if (m_bVisitLang) {
     if (pWayPointMan) WayPointmanGui(*pWayPointMan).ReloadRoutepointIcons();
+  }
 
-      // FIXME Move these two
-      // g_NMEAAPBPrecision = m_choicePrecision->GetCurrentSelection();
-      // g_TalkerIdText = m_TalkerIdText->GetValue().MakeUpper();
+  // FIXME Move these two
+  // g_NMEAAPBPrecision = m_choicePrecision->GetCurrentSelection();
+  // g_TalkerIdText = m_TalkerIdText->GetValue().MakeUpper();
 
 #ifdef ocpnUSE_GL
   if (g_bopengl != pOpenGL->GetValue()) m_returnChanges |= GL_CHANGED;
@@ -8660,8 +8731,8 @@ void ChartGroupsUI::PopulateTreeCtrl(wxTreeCtrl* ptc,
       ptc->SetItemText(id, dirname);
       if (pFont) ptc->SetItemFont(id, *pFont);
 
-        // On MacOS, use the default system dialog color, to honor Dark mode.
 #ifndef __WXOSX__
+      // On MacOS, use the default system dialog color, to honor Dark mode.
       ptc->SetItemTextColour(id, col);
 #endif
       ptc->SetItemHasChildren(id);

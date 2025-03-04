@@ -83,6 +83,7 @@
 #include "model/sys_events.h"
 #include "model/track.h"
 
+#include "dialog_alert.h"
 #include "AboutFrameImpl.h"
 #include "about.h"
 #include "ais.h"
@@ -457,8 +458,8 @@ void BuildiENCToolbar(bool bnew) {
   }
 }
 
-int ShowNavWarning() {
-  wxString msg0(
+bool ShowNavWarning() {
+  wxString msg(
       _("\n\
 OpenCPN is distributed in the hope that it will be useful, \
 but WITHOUT ANY WARRANTY; without even the implied \
@@ -468,34 +469,28 @@ See the GNU General Public License for more details.\n\n\
 OpenCPN must only be used in conjunction with approved \
 paper charts and traditional methods of navigation.\n\n\
 DO NOT rely upon OpenCPN for safety of life or property.\n\n\
-Please click \"OK\" to agree and proceed, \"Cancel\" to quit.\n"));
+Please click \"Agree\" and proceed, or \"Cancel\" to quit.\n"));
 
   wxString vs = wxString::Format(wxT(" .. Version %s"), VERSION_FULL);
 
 #ifdef __ANDROID__
-  androidShowDisclaimer(_("OpenCPN for Android") + vs, msg0);
+  androidShowDisclaimer(_("OpenCPN for Android") + vs, msg);
   return true;
 #else
-  wxColor fg = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
-  wxString msg1;
-  msg1.Printf(_T("<html><body><font color=#%02x%02x%02x><hr />"), fg.Red(),
-              fg.Green(), fg.Blue());
+  msg.Replace("\n", "<br>");
 
-  for (unsigned int i = 0; i < msg0.Length(); i++) {
-    if (msg0[i] == '\n')
-      msg1 += _T("<br>");
-    else
-      msg1 += msg0[i];
-  }
+  std::stringstream html;
+  html << "<html><body><p>";
+  html << msg.ToStdString();
+  html << "</p></body></html>";
 
-  msg1 << _T("<hr /></font></body></html>");
-
-  OCPN_TimedHTMLMessageDialog infoDlg(
-      gFrame, msg1, _("Welcome to OpenCPN") + vs, -1, wxCANCEL | wxOK);
-
-  infoDlg.ShowModal();
-
-  return (infoDlg.GetReturnCode());
+  std::string title = _("Welcome to OpenCPN").ToStdString();
+  std::string action = _("Agree").ToStdString();
+  AlertDialog *info_dlg = new AlertDialog(gFrame, title, action);
+  info_dlg->SetInitialSize();
+  info_dlg->AddHtmlContent(html);
+  int agreed = info_dlg->ShowModal();
+  return agreed == wxID_YES;
 #endif
 }
 
@@ -4476,6 +4471,8 @@ bool MyFrame::UpdateChartDatabaseInplace(ArrayOfCDI &DirArray, bool b_force,
   wxLogMessage(_T("Starting chart database Update..."));
   wxString gshhg_chart_loc = gWorldMapLocation;
   gWorldMapLocation = wxEmptyString;
+  // The Update() function may set gWorldMapLocation if at least one of the
+  // directories contains GSHHS files.
   ChartData->Update(DirArray, b_force, pprog);
   ChartData->SaveBinary(ChartListFileName);
   wxLogMessage(_T("Finished chart database Update"));
@@ -4494,6 +4491,8 @@ bool MyFrame::UpdateChartDatabaseInplace(ArrayOfCDI &DirArray, bool b_force,
       ChartCanvas *cc = g_canvasArray.Item(i);
       if (cc) cc->ResetWorldBackgroundChart();
     }
+    // Reset the GSHHS singleton which is used to detect land crossing.
+    gshhsCrossesLandReset();
   }
 
   delete pprog;
@@ -5397,45 +5396,44 @@ void MyFrame::OnFrameTenHzTimer(wxTimerEvent &event) {
 
   bool b_update = false;
   if (g_btenhertz) {
-    if (std::isnan(gCog)) return;
-    if (std::isnan(gSog)) return;
+    if (!std::isnan(gCog) && !std::isnan(gSog)) {
+      // Estimate current state by extrapolating from last "ground truth" state
 
-    // Estimate current state by extrapolating from last "ground truth" state
-
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    uint64_t diff = 1e9 * (now.tv_sec) + now.tv_nsec - fix_time_gt;
-    double diffc = diff / 1e9;  // sec
-
-    // Set gCog as estimated from last two ground truth fixes
-    double gCog_tentative = gCog_gt_m1 + (cog_rate_gt * diffc);
-    if (gCog_tentative >= 360.) gCog_tentative -= 360.;
-    if (gCog_tentative < 0.) gCog_tentative += 360.;
-    gCog = gCog_tentative;
-
-    // printf("                      cog:  %g\n", gCog);
-    //   And the same for gHdt
-    if (!std::isnan(gHdt_gt)) {
-      uint64_t diff = 1e9 * (now.tv_sec) + now.tv_nsec - hdt_time_gt;
+      struct timespec now;
+      clock_gettime(CLOCK_MONOTONIC, &now);
+      uint64_t diff = 1e9 * (now.tv_sec) + now.tv_nsec - fix_time_gt;
       double diffc = diff / 1e9;  // sec
-      gHdt = gHdt_gt_m1 + (hdt_rate_gt * diffc);
-    }
 
-    // Estimate lat/lon position
-    if (gSog_gt) {
-      double delta_t = diffc / 3600;        // hours
-      double distance = gSog_gt * delta_t;  // NMi
+      // Set gCog as estimated from last two ground truth fixes
+      double gCog_tentative = gCog_gt_m1 + (cog_rate_gt * diffc);
+      if (gCog_tentative >= 360.) gCog_tentative -= 360.;
+      if (gCog_tentative < 0.) gCog_tentative += 360.;
+      gCog = gCog_tentative;
 
-      // spherical (close enough)
-      double angr = gCog_gt / 180 * M_PI;
-      double latr = gLat_gt * M_PI / 180;
-      double D = distance / 3443;  // earth radius in nm
-      double sD = sin(D), cD = cos(D);
-      double sy = sin(latr), cy = cos(latr);
-      double sa = sin(angr), ca = cos(angr);
+      // printf("                      cog:  %g\n", gCog);
+      //   And the same for gHdt
+      if (!std::isnan(gHdt_gt) && !std::isnan(gHdt_gt_m1)) {
+        uint64_t diff = 1e9 * (now.tv_sec) + now.tv_nsec - hdt_time_gt;
+        double diffc = diff / 1e9;  // sec
+        gHdt = gHdt_gt_m1 + (hdt_rate_gt * diffc);
+      }
 
-      gLon = gLon_gt + asin(sa * sD / cy) * 180 / M_PI;
-      gLat = asin(sy * cD + cy * sD * ca) * 180 / M_PI;
+      // Estimate lat/lon position
+      if (gSog_gt && !std::isnan(gCog_gt)) {
+        double delta_t = diffc / 3600;        // hours
+        double distance = gSog_gt * delta_t;  // NMi
+
+        // spherical (close enough)
+        double angr = gCog_gt / 180 * M_PI;
+        double latr = gLat_gt * M_PI / 180;
+        double D = distance / 3443;  // earth radius in nm
+        double sD = sin(D), cD = cos(D);
+        double sy = sin(latr), cy = cos(latr);
+        double sa = sin(angr), ca = cos(angr);
+
+        gLon = gLon_gt + asin(sa * sD / cy) * 180 / M_PI;
+        gLat = asin(sy * cD + cy * sD * ca) * 180 / M_PI;
+      }
     }
 
     b_update = true;
@@ -5455,9 +5453,9 @@ void MyFrame::OnFrameTenHzTimer(wxTimerEvent &event) {
     for (ChartCanvas *cc : g_canvasArray) {
       if (cc) {
         if (g_bopengl) {
-          if (b_rotate || cc->m_bFollow)
+          if (b_rotate || cc->m_bFollow) {
             cc->DoCanvasUpdate();
-          else
+          } else
             cc->Refresh();
         }
       }
@@ -5757,9 +5755,11 @@ void MyFrame::OnFrameTimer1(wxTimerEvent &event) {
           bool b_rotate = cc->GetUpMode() != NORTH_UP_MODE;
           if (!b_rotate) {
             if (!g_btenhertz) {
-              if (cc->m_bFollow)
+              if (cc->m_bFollow) {
                 cc->DoCanvasUpdate();
-              else
+                if (bnew_view)
+                  cc->Refresh(false);  // honor ownship state update
+              } else
                 cc->Refresh(false);
             } else {
               // Pick up SOG=0, COG=NAN report at 10Hz.
@@ -6874,9 +6874,11 @@ void MyFrame::applySettingsString(wxString settings) {
 
   if (previous_expert != g_bUIexpert) b_newToolbar = true;
 
-  if (rr & TOOLBAR_CHANGED) b_newToolbar = true;
+  if (rr & TOOLBAR_CHANGED) {
+    b_newToolbar = true;
+  }
 
-    //  We do this is one case only to remove an orphan recovery window
+  //  We do this is one case only to remove an orphan recovery window
 #ifdef __ANDROID__
   if (previous_expert && !g_bUIexpert) {
     androidForceFullRepaint();

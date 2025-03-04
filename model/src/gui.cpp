@@ -31,15 +31,3 @@ wxWindow* GetTopWindow() {
   assert(top_window && "Cannot find MainWindow a k a gFrame");
   return top_window;
 }
-
-// Propagate layout resize to all parent windows
-void PropagateResize(wxWindow* window) {
-  wxWindow* parent = window->GetParent();
-  while (parent) {
-    parent->Layout();
-    parent = parent->GetParent();
-    if (wxTopLevelWindow* topLevel = wxDynamicCast(parent, wxTopLevelWindow)) {
-      break;
-    }
-  }
-}

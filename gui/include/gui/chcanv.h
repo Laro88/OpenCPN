@@ -27,6 +27,7 @@
 #ifndef _CHCANV_H__
 #define _CHCANV_H__
 
+#include <cstdint>
 #include "bbox.h"
 
 #include <wx/datetime.h>
@@ -157,6 +158,21 @@ public:
 
   bool MouseEventSetup(wxMouseEvent &event, bool b_handle_dclick = true);
   bool MouseEventProcessObjects(wxMouseEvent &event);
+  /**
+   * Processes mouse events for core chart panning and zooming operations.
+   *
+   * This method handles the main chart navigation interactions:
+   * - Mouse wheel zooming with configurable sensitivity and optional smoothing.
+   * - Left-click chart centering. Centers chart on click point in non-drag
+   * scenarios.
+   * - Click-and-drag panning. Updates chart position continuously during drag.
+   *
+   * @param event The mouse event to process
+   * @return true if event was processed, false to allow focus shifting between
+   * canvases.
+   *
+   * @note Interacts with route creation and measurement tools active states
+   */
   bool MouseEventProcessCanvas(wxMouseEvent &event);
   void SetCanvasCursor(wxMouseEvent &event);
   void OnKillFocus(wxFocusEvent &WXUNUSED(event));
@@ -219,6 +235,10 @@ public:
   bool SetVPProjection(int projection);
   /**
    * Set the viewport center point.
+   * Centers the view on a specific lat/lon position.
+   * @param lat Latitude in degrees
+   * @param lon Longitude in degrees
+   * @return true if view was changed successfully
    */
   bool SetViewPoint(double lat, double lon);
   bool SetViewPointByCorners(double latSW, double lonSW, double latNE,
@@ -361,6 +381,10 @@ public:
 
   bool IsMeasureActive() { return m_bMeasure_Active; }
   wxBitmap &GetTideBitmap() { return m_cTideBitmap; }
+  Undo *undo;
+
+  int GetUpMode() { return m_upMode; }
+  bool GetLookahead() { return m_bLookAhead; }
 
   void UnlockQuilt();
   void SetQuiltMode(bool b_quilt);
@@ -419,7 +443,6 @@ public:
    */
   double GetCanvasTrueScale() { return m_true_scale_ppm; }
   double GetAbsoluteMinScalePpm() { return m_absolute_min_scale_ppm; }
-  ViewPort &GetVP();
   ViewPort *GetpVP() { return &VPoint; }
   void SetVP(ViewPort &);
   ChartBase *GetChartAtCursor();
@@ -513,6 +536,80 @@ public:
   void HideGlobalToolbar();
   void ShowGlobalToolbar();
 
+  bool GetShowDepthUnits() { return m_bShowDepthUnits; }
+  void SetShowDepthUnits(bool show) { m_bShowDepthUnits = show; }
+  bool GetShowGrid() { return m_bDisplayGrid; }
+  void SetShowGrid(bool show) { m_bDisplayGrid = show; }
+  bool GetShowOutlines() { return m_bShowOutlines; }
+  void SetShowOutlines(bool show) { m_bShowOutlines = show; }
+  bool GetShowChartbar() { return true; }
+  wxRect GetMUIBarRect();
+  void SetMUIBarPosition();
+  void DestroyMuiBar();
+  void CreateMUIBar();
+
+  void ToggleChartOutlines(void);
+  void ToggleCanvasQuiltMode(void);
+
+  wxString GetScaleText() { return m_scaleText; }
+  double GetScaleValue() { return m_scaleValue; }
+  bool GetShowAIS() { return m_bShowAIS; }
+  void SetShowAIS(bool show);
+  bool GetAttenAIS() { return m_bShowAISScaled; }
+  void SetAttenAIS(bool show);
+  void SetShowFocusBar(bool enable) { m_show_focus_bar = enable; }
+  bool GetShowFocusBar() { return m_show_focus_bar; }
+  MUIBar *GetMUIBar() { return m_muiBar; }
+  void SetAlertString(wxString str) { m_alertString = str; }
+  wxString GetAlertString() { return m_alertString; }
+  bool GetShowENCText() { return m_encShowText; }
+  void SetShowENCText(bool show);
+
+  bool GetShowENCDepth() { return m_encShowDepth; }
+  void SetShowENCDepth(bool show);
+
+  bool GetShowENCLightDesc() { return m_encShowLightDesc; }
+  void SetShowENCLightDesc(bool show);
+
+  bool GetShowENCBuoyLabels() { return m_encShowBuoyLabels; }
+  void SetShowENCBuoyLabels(bool show);
+
+  bool GetShowENCLights() { return m_encShowLights; }
+  void SetShowENCLights(bool show);
+
+  int GetENCDisplayCategory() { return m_encDisplayCategory; }
+  void SetENCDisplayCategory(int category);
+
+  bool GetShowENCAnchor() { return m_encShowAnchor; }
+  void SetShowENCAnchor(bool show);
+
+  bool GetShowENCDataQual() { return m_encShowDataQual; }
+  void SetShowENCDataQual(bool show);
+
+  void JaggyCircle(ocpnDC &dc, wxPen pen, int x, int y, int radius);
+  int m_canvasIndex;
+  void ShowTides(bool bShow);
+  void ShowCurrents(bool bShow);
+  void SetUpMode(int mode);
+  void ToggleLookahead();
+  void SetShowGPS(bool show);
+  void UpdateFollowButtonState(void);
+  void InvalidateGL();
+  bool IsTileOverlayIndexInYesShow(int index);
+  bool IsTileOverlayIndexInNoShow(int index);
+  void AddTileOverlayIndexToNoShow(int index);
+  int m_groupIndex;
+  Route *m_pMouseRoute;
+  bool m_bMeasure_Active;
+  ViewPort &GetVP();
+  ChartBase *m_singleChart;
+  Quilt *m_pQuilt;
+  wxString FindValidUploadPort();
+  wxString m_active_upload_port;
+
+  // protected:
+
+  // private:
   ChartBase *GetLargestScaleQuiltChart();
   ChartBase *GetFirstQuiltChart();
   ChartBase *GetNextQuiltChart();
@@ -532,9 +629,6 @@ public:
   int GetCanvasChartNativeScale();
   int FindClosestCanvasChartdbIndex(int scale);
   void UpdateCanvasOnGroupChange(void);
-  void SetUpMode(int mode);
-  void ToggleLookahead();
-  void SetShowGPS(bool show);
 
   void ShowObjectQueryWindow(int x, int y, float zlat, float zlon);
   void ShowMarkPropertiesDialog(RoutePoint *markPoint);
@@ -579,12 +673,12 @@ public:
 
   bool IsPianoContextMenuActive() { return m_piano_ctx_menu != 0; }
   bool DoCanvasCOGSet(void);
-  void UpdateFollowButtonState(void);
   void ApplyGlobalSettings();
   void SetShowGPSCompassWindow(bool bshow);
   bool GetShowGPSCompassWindow() { return m_bShowCompassWin; }
   void FreezePiano() { m_pianoFrozen = true; }
   void ThawPiano() { m_pianoFrozen = false; }
+  void StartChartDragInertia();
 
   // Todo build more accessors
   bool m_bFollow;
@@ -599,20 +693,14 @@ public:
       m_cursor_lon;  //!< The longitude at the mouse cursor position in degrees.
   double
       m_cursor_lat;  //!< The latitude at the mouse cursor position in degrees.
-  Undo *undo;
   wxPoint r_rband;
   double m_prev_rlat;
   double m_prev_rlon;
   RoutePoint *m_prev_pMousePoint;
-  Quilt *m_pQuilt;
   bool m_bShowNavobjects;
-  int m_canvasIndex;
-  int m_groupIndex;
   int m_routeState;
-  ChartBase *m_singleChart;
   int m_upMode;
   bool m_bLookAhead;
-  double m_VPRotate;
 
 #ifdef HAVE_WX_GESTURE_EVENTS
   double m_oldVPSScale;
@@ -626,26 +714,18 @@ public:
   void StartRoute(void);
   void FinishRoute(void);
 
-  void InvalidateGL();
-
 #ifdef ocpnUSE_GL
   glChartCanvas *GetglCanvas() { return m_glcc; }
 #endif
 
-  void JaggyCircle(ocpnDC &dc, wxPen pen, int x, int y, int radius);
-
   bool CheckEdgePan(int x, int y, bool bdragging, int margin, int delta);
 
-  Route *m_pMouseRoute;
   bool m_FinishRouteOnKillFocus;
-  bool m_bMeasure_Active;
   bool m_bMeasure_DistCircle;
-  wxString m_active_upload_port;
   bool m_bAppendingRoute;
   int m_nMeasureState;
   Route *m_pMeasureRoute;
   MyFrame *parent_frame;
-  wxString FindValidUploadPort();
   CanvasMenuHandler *m_canvasMenu;
   int GetMinAvailableGshhgQuality() {
     return pWorldBackgroundChart->GetMinAvailableQuality();
@@ -666,72 +746,11 @@ public:
                             ChartFamilyEnum New_Family = CHART_FAMILY_DONTCARE);
   void SelectdbChart(int dbindex);
 
-  void ShowTides(bool bShow);
-  void ShowCurrents(bool bShow);
-
   void DoCanvasStackDelta(int direction);
 
   void ProcessNewGUIScale();
 
-  bool GetShowDepthUnits() { return m_bShowDepthUnits; }
-  void SetShowDepthUnits(bool show) { m_bShowDepthUnits = show; }
-  bool GetShowGrid() { return m_bDisplayGrid; }
-  void SetShowGrid(bool show) { m_bDisplayGrid = show; }
-  bool GetShowOutlines() { return m_bShowOutlines; }
-  void SetShowOutlines(bool show) { m_bShowOutlines = show; }
-  bool GetShowChartbar() { return true; }
-  wxRect GetMUIBarRect();
-  void SetMUIBarPosition();
-  void DestroyMuiBar();
-  void CreateMUIBar();
-
-  void ToggleChartOutlines(void);
-  void ToggleCanvasQuiltMode(void);
-
-  wxString GetScaleText() { return m_scaleText; }
-  double GetScaleValue() { return m_scaleValue; }
-
   bool m_b_paint_enable;
-
-  bool GetShowENCText() { return m_encShowText; }
-  void SetShowENCText(bool show);
-
-  bool GetShowENCDepth() { return m_encShowDepth; }
-  void SetShowENCDepth(bool show);
-
-  bool GetShowENCLightDesc() { return m_encShowLightDesc; }
-  void SetShowENCLightDesc(bool show);
-
-  bool GetShowENCBuoyLabels() { return m_encShowBuoyLabels; }
-  void SetShowENCBuoyLabels(bool show);
-
-  bool GetShowENCLights() { return m_encShowLights; }
-  void SetShowENCLights(bool show);
-
-  int GetENCDisplayCategory() { return m_encDisplayCategory; }
-  void SetENCDisplayCategory(int category);
-
-  bool GetShowENCAnchor() { return m_encShowAnchor; }
-  void SetShowENCAnchor(bool show);
-
-  bool GetShowENCDataQual() { return m_encShowDataQual; }
-  void SetShowENCDataQual(bool show);
-
-  int GetUpMode() { return m_upMode; }
-  bool GetLookahead() { return m_bLookAhead; }
-
-  bool GetShowAIS() { return m_bShowAIS; }
-  void SetShowAIS(bool show);
-  bool GetAttenAIS() { return m_bShowAISScaled; }
-  void SetAttenAIS(bool show);
-
-  void SetShowFocusBar(bool enable) { m_show_focus_bar = enable; }
-  bool GetShowFocusBar() { return m_show_focus_bar; }
-
-  MUIBar *GetMUIBar() { return m_muiBar; }
-
-  void SetAlertString(wxString str) { m_alertString = str; }
-  wxString GetAlertString() { return m_alertString; }
 
   wxRect GetScaleBarRect() { return m_scaleBarRect; }
   void RenderAlertMessage(wxDC &dc, const ViewPort &vp);
@@ -739,10 +758,6 @@ public:
   std::vector<int> m_tile_noshow_index_array;
   std::vector<int> m_tile_yesshow_index_array;
   std::vector<int> m_quilt_noshow_index_array;
-
-  bool IsTileOverlayIndexInYesShow(int index);
-  bool IsTileOverlayIndexInNoShow(int index);
-  void AddTileOverlayIndexToNoShow(int index);
 
   std::vector<int> GetQuiltNoshowIindexArray() {
     return m_quilt_noshow_index_array;
@@ -1164,6 +1179,39 @@ private:
   bool m_timed_move_vp_active;
   int m_timedVP_step;
   int m_stvpc;
+
+  double meters_to_shift = 0;
+  double dir_to_shift = 0;
+
+  // Chart drag inertia support
+  wxTimer m_chart_drag_inertia_timer;
+  void OnChartDragInertiaTimer(wxTimerEvent &event);
+
+  uint64_t m_last_drag_time;
+  int m_chart_drag_total_x;
+  int m_chart_drag_total_y;
+  double m_chart_drag_total_time;
+  double m_chart_drag_velocity_x;
+  double m_chart_drag_velocity_y;
+  wxLongLong m_chart_drag_inertia_time;
+  wxLongLong m_chart_drag_inertia_start_time;
+  bool m_chart_drag_inertia_active;
+  double m_last_elapsed;
+  std::vector<int> m_drag_vec_x;
+  std::vector<int> m_drag_vec_y;
+  std::vector<double> m_drag_vec_t;
+  int m_inertia_last_drag_x;
+  int m_inertia_last_drag_y;
+
+  // For Jump animation
+  wxTimer m_easeTimer;
+  wxLongLong m_animationStart;
+  wxLongLong m_animationDuration;  // e.g. 300 ms
+  double m_startLat, m_startLon, m_startScale;
+  double m_endLat, m_endLon, m_endScale;
+  bool m_animationActive;
+  void OnJumpEaseTimer(wxTimerEvent &event);
+  bool StartSmoothJump(double lat, double lon, double scale_ppm);
 
   DECLARE_EVENT_TABLE()
 };

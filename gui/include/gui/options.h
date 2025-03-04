@@ -101,6 +101,7 @@ enum {
   ID_BUTTONDELETE,
   ID_BUTTONCOMPRESS,
   ID_BUTTONFONTCHOOSE,
+  ID_BUTTONFONT_RESET,
   ID_BUTTONECDISHELP,
   ID_BUTTONFONTCOLOR,
   ID_BUTTONGROUP,
@@ -416,7 +417,7 @@ public:
   wxCheckBox *pOZScaleVector, *pToolbarAutoHideCB, *pInlandEcdis, *pRollover;
   wxCheckBox *pZoomButtons, *pChartBarEX;
   wxTextCtrl *pCOGUPUpdateSecs, *m_pText_OSCOG_Predictor, *pScreenMM;
-  wxTextCtrl *pToolbarHideSecs, *m_pText_OSHDT_Predictor;
+  wxTextCtrl *pToolbarHideSecs, *m_pText_OSHDT_Predictor, *m_pTxt_OwnMMSI;
 
   wxTextCtrl *pCmdSoundString;
 
@@ -648,6 +649,7 @@ private:
 
   void OnAlertEnableButtonClick(wxCommandEvent &event);
   void OnAlertAudioEnableButtonClick(wxCommandEvent &event);
+  void OnResetFont(wxCommandEvent &event);
 
   void UpdateTemplateTitleText();
   void CheckDeviceAccess(wxString &path);

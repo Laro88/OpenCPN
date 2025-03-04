@@ -17,9 +17,9 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,  USA.         *
  ***************************************************************************
  */
-#include <wx/event.h>
 #include <wx/button.h>
 #include <wx/dialog.h>
+#include <wx/event.h>
 #include <wx/sizer.h>
 
 #include "dialog_alert.h"
@@ -38,16 +38,11 @@ AlertDialog::AlertDialog(wxWindow* parent, const std::string& title,
 
   Bind(wxEVT_BUTTON, &AlertDialog::OnConfirm, this, wxID_OK);
   Bind(wxEVT_BUTTON, &AlertDialog::OnCancel, this, wxID_CANCEL);
-#if wxCHECK_VERSION(3, 2, 0)
-  auto flags = wxSizerFlags().Border(wxALL, FromDIP(kDialogPadding));
-#else
-  auto flags = wxSizerFlags().Border();
-#endif
-  m_layout->Add(footer, flags);
+  auto spacing = GUI::GetSpacing(this, kDialogPadding);
+  m_layout->Add(footer, wxSizerFlags().Border(wxALL, spacing).Expand());
 }
 
-AlertDialog::~AlertDialog() {
-}
+AlertDialog::~AlertDialog() {}
 
 void AlertDialog::SetListener(IAlertConfirmation* listener) {
   m_listener = listener;
@@ -55,20 +50,6 @@ void AlertDialog::SetListener(IAlertConfirmation* listener) {
 
 void AlertDialog::SetMessage(const std::string& msg) {
   m_content->Add(new wxStaticText(this, wxID_ANY, msg));
-  m_content->SetSizeHints(this);
-}
-
-int AlertDialog::ShowModal() {
-
-  // Adjust the dialog size.
-  m_layout->Fit(this);
-  wxSize size(GetSize());
-  if (size.x < size.y * 3 / 2) {
-    size.x = size.y * 3 / 2;
-    SetSize(size);
-  }
-  Centre(wxBOTH | wxCENTER_FRAME);
-  return wxDialog::ShowModal();
 }
 
 int AlertDialog::GetConfirmation(wxWindow* parent, const std::string& title,

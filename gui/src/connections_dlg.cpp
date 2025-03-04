@@ -9,6 +9,7 @@
 #include <wx/grid.h>
 #include <wx/panel.h>
 #include <wx/sizer.h>
+#include <wx/spinctrl.h>
 #include <wx/textctrl.h>
 #include <wx/window.h>
 
@@ -125,6 +126,25 @@ private:
   EventVar& m_evt_add_connection;
 };
 
+/** Scrollable window wrapping the client i. e., the grid. */
+class ScrolledWindow : public wxScrolledWindow {
+public:
+  ScrolledWindow(wxWindow* parent)
+      : wxScrolledWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+                         wxVSCROLL) {}
+
+  /** Set contents and size limits for scrollable area. */
+  void AddClient(wxWindow* client, wxSize max_size, wxSize min_size) {
+    auto vbox = new wxBoxSizer(wxVERTICAL);
+    vbox->Add(client, wxSizerFlags().Border());
+    SetSizer(vbox);
+    SetMinClientSize(min_size);
+    SetMaxSize(max_size);
+    vbox->Layout();
+    SetScrollRate(0, 10);
+  }
+};
+
 /** Grid with existing connections: type, port, status, etc. */
 class Connections : public wxGrid {
 public:
@@ -160,6 +180,12 @@ public:
       OnMouseMove(ev);
       ev.Skip();
     });
+
+    GetGridWindow()->Bind(wxEVT_MOUSEWHEEL, [&](wxMouseEvent& ev) {
+      OnWheel(ev);
+      ev.Skip();
+    });
+
     Bind(wxEVT_GRID_LABEL_LEFT_CLICK,
          [&](wxGridEvent& ev) { HandleSort(ev.GetCol()); });
     Bind(wxEVT_GRID_CELL_LEFT_CLICK,
@@ -171,6 +197,18 @@ public:
     conn_change_lstnr.Init(
         m_conn_states.evt_conn_status_change,
         [&](ObservedEvt&) { OnConnectionChange(m_connections); });
+  }
+
+  void OnWheel(wxMouseEvent& ev) {
+    auto p = GetParent();
+    auto psw = static_cast<ScrolledWindow*>(p);
+    int dir = ev.GetWheelRotation();
+    int xpos, ypos;
+    psw->GetViewStart(&xpos, &ypos);
+    int xsu, ysu;
+    psw->GetScrollPixelsPerUnit(&xsu, &ysu);
+    // Not sure where the factor "4" comes from...
+    psw->Scroll(-1, ypos - (dir / ysu) / 4);
   }
 
   /** Reload grid using data from given list of connections. */
@@ -565,6 +603,7 @@ public:
     sizer->Add(new BearingsCheckbox(this), wxSizerFlags().Expand());
     sizer->Add(new NmeaFilterRow(this), wxSizerFlags().Expand());
     sizer->Add(new TalkerIdRow(this), wxSizerFlags().Expand());
+    sizer->Add(new NetmaskRow(this), wxSizerFlags().Expand());
     sizer->Add(new PrioritiesBtn(this), wxSizerFlags().Border());
     SetSizer(sizer);
   }
@@ -642,6 +681,52 @@ private:
     void Cancel() override { text_ctrl->SetValue(g_TalkerIdText); }
   };
 
+  /** Global netmask configuration bound to g_netmask_bits. */
+  class NetmaskRow : public wxPanel, public ApplyCancel {
+  public:
+    NetmaskRow(wxWindow* parent)
+        : wxPanel(parent),
+          m_spin_ctrl(new wxSpinCtrl(this, wxID_ANY)),
+          m_text(new wxStaticText(this, wxID_ANY, "")) {
+      m_spin_ctrl->SetRange(8, 32);
+      auto hbox = new wxBoxSizer(wxHORIZONTAL);
+      auto flags = wxSizerFlags().Align(wxALIGN_CENTRE_VERTICAL).Border();
+      hbox->Add(new wxStaticText(this, wxID_ANY, _("Netmask: ")), flags);
+      hbox->Add(m_text, flags);
+      hbox->Add(new wxStaticText(this, wxID_ANY, _("length (bits): ")), flags);
+      hbox->Add(m_spin_ctrl, flags);
+      SetSizer(hbox);
+      Cancel();
+
+      Bind(wxEVT_SPINCTRL, [&](wxSpinEvent& ev) {
+        m_text->SetLabel(BitsToDottedMask(m_spin_ctrl->GetValue()));
+        Layout();
+      });
+    }
+
+    void Apply() override { g_netmask_bits = m_spin_ctrl->GetValue(); }
+
+    void Cancel() override {
+      m_spin_ctrl->SetValue(g_netmask_bits);
+      m_text->SetLabel(BitsToDottedMask(m_spin_ctrl->GetValue()));
+      Layout();
+    }
+
+  private:
+    wxSpinCtrl* m_spin_ctrl;
+    wxStaticText* m_text;
+
+    std::string BitsToDottedMask(unsigned bits) {
+      uint32_t mask = 0xffffffff << (32 - bits);
+      std::stringstream ss;
+      ss << ((mask & 0xff000000) >> 24) << ".";
+      ss << ((mask & 0x00ff0000) >> 16) << ".";
+      ss << ((mask & 0x0000ff00) >> 8) << ".";
+      ss << (mask & 0x000000ff);
+      return ss.str();
+    }
+  };
+
   /** Button invokes "Adjust communication priorities" GUI. */
   class PrioritiesBtn : public wxButton {
   public:
@@ -653,25 +738,6 @@ private:
       });
     }
   };
-};
-
-/** Scrollable window wrapping the client i. e., the grid. */
-class ScrolledWindow : public wxScrolledWindow {
-public:
-  ScrolledWindow(wxWindow* parent)
-      : wxScrolledWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-                         wxVSCROLL) {}
-
-  /** Set contents and size limits for scrollable area. */
-  void AddClient(wxWindow* client, wxSize max_size, wxSize min_size) {
-    auto vbox = new wxBoxSizer(wxVERTICAL);
-    vbox->Add(client, wxSizerFlags().Border());
-    SetSizer(vbox);
-    SetMinClientSize(min_size);
-    SetMaxSize(max_size);
-    vbox->Layout();
-    SetScrollRate(0, 10);
-  }
 };
 
 /** Main window: connections grid, "Add new connection", general options. */
@@ -717,18 +783,18 @@ ConnectionsDlg::ConnectionsDlg(
   m_add_connection_lstnr.Init(m_evt_add_connection, on_evt_update_connections);
 };
 
+void ConnectionsDlg::OnResize() {
+  Layout();
+  Refresh();
+  Update();
+}
+
 void ConnectionsDlg::DoApply(wxWindow* root) {
   for (wxWindow* child : root->GetChildren()) {
     auto widget = dynamic_cast<ApplyCancel*>(child);
     if (widget) widget->Apply();
     DoApply(child);
   }
-}
-
-void ConnectionsDlg::OnResize() {
-  Layout();
-  Refresh();
-  Update();
 }
 
 void ConnectionsDlg::DoCancel(wxWindow* root) {

@@ -57,7 +57,7 @@ CustomGrid::CustomGrid(wxWindow* parent, wxWindowID id, const wxPoint& pos,
     m_NumRowVal.push_back(std::vector<double>());
   }
   // init labels attr
-  wxFont labelfont = GetOCPNGUIScaledFont_PlugIn(_T("Dialog")).MakeBold();
+  wxFont labelfont = GetOCPNGUIScaledFont_PlugIn(_("Dialog")).MakeBold();
   SetLabelFont(labelfont);
   wxColour colour = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
   if (colour.Red() > 128) {
@@ -87,15 +87,18 @@ CustomGrid::CustomGrid(wxWindow* parent, wxWindowID id, const wxPoint& pos,
           wxGridEventHandler(CustomGrid::OnLabeClick), nullptr, this);
   // connect events at grid level
   GetGridWindow()->Connect(wxEVT_LEFT_DOWN,
-                           wxMouseEventHandler(CustomGrid::OnMouseEvent), nullptr,
-                           this);
-  GetGridWindow()->Connect(
-      wxEVT_LEFT_UP, wxMouseEventHandler(CustomGrid::OnMouseEvent), nullptr, this);
-  GetGridWindow()->Connect(
-      wxEVT_MOTION, wxMouseEventHandler(CustomGrid::OnMouseEvent), nullptr, this);
+                           wxMouseEventHandler(CustomGrid::OnMouseEvent),
+                           nullptr, this);
+  GetGridWindow()->Connect(wxEVT_LEFT_UP,
+                           wxMouseEventHandler(CustomGrid::OnMouseEvent),
+                           nullptr, this);
+  GetGridWindow()->Connect(wxEVT_MOTION,
+                           wxMouseEventHandler(CustomGrid::OnMouseEvent),
+                           nullptr, this);
   // timer event
-  m_tRefreshTimer.Connect(
-      wxEVT_TIMER, wxTimerEventHandler(CustomGrid::OnRefreshTimer), nullptr, this);
+  m_tRefreshTimer.Connect(wxEVT_TIMER,
+                          wxTimerEventHandler(CustomGrid::OnRefreshTimer),
+                          nullptr, this);
 }
 
 CustomGrid::~CustomGrid() {
