@@ -61,11 +61,6 @@ public:
 
 private:
   void Run();
-  
-  /** IoThread interface: Guards return_status */
-  
-
-  /** IoThread interface: Guards return_status */
   std::condition_variable return_status_cv;
 
   const std::string m_endpoint;

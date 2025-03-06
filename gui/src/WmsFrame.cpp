@@ -64,7 +64,7 @@ void WmsFrame::OnWmsRequestEvent(wxWMSRequestEvent& event) {
       wxLogMessage("dimension change req to w: %i h:%i", event.p.w, event.p.h);
       
       int newChartW = event.p.w + 2;
-      //int newChartH = event.p.h + 174;
+      // int newChartH = event.p.h + 174;
       int newChartH = event.p.h + 204;
 
       m_pTgtFrame->SetSize(newChartW+300, newChartH+300);
@@ -80,8 +80,9 @@ void WmsFrame::OnWmsRequestEvent(wxWMSRequestEvent& event) {
     m_pChartCanvas->SetShowGPS(false);
     m_pChartCanvas->SetShowGPSCompassWindow(false);
     m_pChartCanvas->SetShowDepthUnits(false);
+     
 
-    //TODO fix color change
+    // Handle the colors
     if (lastcolor != event.p.color) {
       lastcolor = event.p.color;
 
@@ -109,7 +110,7 @@ void WmsFrame::OnWmsRequestEvent(wxWMSRequestEvent& event) {
     bool update = m_pChartCanvas->DoCanvasUpdate();
     DEBUG_LOG << "CanvasUpdate success:" << update;
 
-    //intermediate window text update - just to see what is requested
+    // intermediate window text update - just to see what is requested
     std::stringstream ssImgInfo;
     ssImgInfo << event.p.hitcount << "\n  NE" << event.p.latNE << ", "
               << event.p.lonNE << "\nSW" << event.p.latSW << ", "

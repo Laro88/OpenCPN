@@ -108,7 +108,7 @@ static void fn(struct mg_connection* c, int ev, void* ev_data, void* fn_data) {
         strBbox = unescape(strBbox);
         strSrs = unescape(strSrs);
 
-        //check for resizing
+        // check for resizing
         int _w = std::stoi(strWidthPx);
         int _h = std::stoi(strHeightPx);
         if (_w != RestServerWms::lastSize_W || _h != RestServerWms::lastSize_H){
@@ -196,7 +196,7 @@ static void fn(struct mg_connection* c, int ev, void* ev_data, void* fn_data) {
 }
 
 //========================================================================
-/*    RestServer implementation */
+/* RestServer implementation */
 
 void RestServerWms::Run() {
   #ifdef RESTSERVERWMS
