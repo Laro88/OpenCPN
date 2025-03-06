@@ -25,13 +25,11 @@
 #include "model/rest_server_wms.h"
 #include "mongoose.h"
 
-
 wxDEFINE_EVENT(WXWMSREQUESTEVENT, wxWMSRequestEvent);
 
 WmsFrame::WmsFrame(wxWindow* parent, wxWindowID id, const wxString& title,
                    const wxPoint& pos, const wxSize& size, long style)
     : wxFrame(parent, id, title, pos, size, style) {
-
   pText = new wxStaticText(this, wxID_STATIC, wxT("Clean"));
   pText->SetForegroundColour(wxColor("red"));
 
@@ -40,8 +38,7 @@ WmsFrame::WmsFrame(wxWindow* parent, wxWindowID id, const wxString& title,
   Bind(WXWMSREQUESTEVENT, &WmsFrame::OnWmsRequestEvent, this);
 }
 
-WmsFrame::~WmsFrame() {
-}
+WmsFrame::~WmsFrame() {}
 
 void WmsFrame::AssignTargetObjects(MyFrame* pF, ChartCanvas* pC) {
   m_pTgtFrame = pF;
@@ -62,12 +59,12 @@ void WmsFrame::OnWmsRequestEvent(wxWMSRequestEvent& event) {
       lastSize_W = event.p.w;
       lastSize_H = event.p.h;
       wxLogMessage("dimension change req to w: %i h:%i", event.p.w, event.p.h);
-      
+
       int newChartW = event.p.w + 2;
       // int newChartH = event.p.h + 174;
       int newChartH = event.p.h + 204;
 
-      m_pTgtFrame->SetSize(newChartW+300, newChartH+300);
+      m_pTgtFrame->SetSize(newChartW + 300, newChartH + 300);
 
       m_pChartCanvas->SetSize(wxSize(newChartW, newChartH));
     }
@@ -80,7 +77,6 @@ void WmsFrame::OnWmsRequestEvent(wxWMSRequestEvent& event) {
     m_pChartCanvas->SetShowGPS(false);
     m_pChartCanvas->SetShowGPSCompassWindow(false);
     m_pChartCanvas->SetShowDepthUnits(false);
-     
 
     // Handle the colors
     if (lastcolor != event.p.color) {
@@ -97,10 +93,10 @@ void WmsFrame::OnWmsRequestEvent(wxWMSRequestEvent& event) {
             ColorScheme::GLOBAL_COLOR_SCHEME_NIGHT);
       } else {
         m_pTgtFrame->SetAndApplyColorScheme(
-            ColorScheme::GLOBAL_COLOR_SCHEME_DAY); //catch all
+            ColorScheme::GLOBAL_COLOR_SCHEME_DAY);  // catch all
       }
     }
-    
+
     m_pChartCanvas->canvasChartsRefresh(-1);
     m_pChartCanvas->SetQuiltMode(true);
 
@@ -114,7 +110,8 @@ void WmsFrame::OnWmsRequestEvent(wxWMSRequestEvent& event) {
     std::stringstream ssImgInfo;
     ssImgInfo << event.p.hitcount << "\n  NE" << event.p.latNE << ", "
               << event.p.lonNE << "\nSW" << event.p.latSW << ", "
-              << event.p.lonSW << "\n" << event.p.color;
+              << event.p.lonSW << "\n"
+              << event.p.color;
 
     pText->SetLabelText(ssImgInfo.str());
 
@@ -173,8 +170,7 @@ void WmsFrame::OnWmsRequestEvent(wxWMSRequestEvent& event) {
     INFO_LOG << "WMS replied to hit:" << event.p.hitcount << " size:" << size;
   } catch (const std::exception& ex) {
     wxLogError(ex.what());
-  }
-  catch(...){
+  } catch (...) {
     ERROR_LOG << "... exception (unhandled) - critical problem somewhere";
   }
 }

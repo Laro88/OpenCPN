@@ -68,7 +68,5 @@ private:
   std::atomic<bool> m_alive = true;
 
   std::thread m_workerthread;
-
- 
 };
 #endif  // guard

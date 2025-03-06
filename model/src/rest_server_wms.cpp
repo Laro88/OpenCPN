@@ -50,21 +50,20 @@ std::function<void(WmsReqParams)> RestServerWms::fCallback;
 
 /** Extract a HTTP variable from query string. */
 inline std::string HttpVarToString(const struct mg_str& query,
-                                          const char* var) {
+                                   const char* var) {
   std::string string;
   struct mg_str mgs = mg_http_var(query, mg_str(var));
   if (mgs.len && mgs.ptr) string = std::string(mgs.ptr, mgs.len);
   return string;
 }
 
-//https://gist.github.com/onderaltintas/6649521//
+// https://gist.github.com/onderaltintas/6649521//
 void coord3857To4326(double lon3857, double lat3857, double& lon4326,
                      double& lat4326) {
- 
-    lon4326 = lon3857 * 180 / 20037508.34;
-    //lat4326 = Math.atan(Math.exp(y * Math.PI / 20037508.34)) * 360 / Math.PI - 90;
-    lat4326 =
-        atan(exp(lat3857 * PI / 20037508.34)) * 360 / PI - 90;
+  lon4326 = lon3857 * 180 / 20037508.34;
+  // lat4326 = Math.atan(Math.exp(y * Math.PI / 20037508.34)) * 360 / Math.PI -
+  // 90;
+  lat4326 = atan(exp(lat3857 * PI / 20037508.34)) * 360 / PI - 90;
 }
 
 std::string unescape(const std::string& StrIn) {
@@ -77,10 +76,11 @@ std::string unescape(const std::string& StrIn) {
 
 // entrypoint for mongoose
 static void fn(struct mg_connection* c, int ev, void* ev_data, void* fn_data) {
- #ifdef RESTSERVERWMS
-  
+#ifdef RESTSERVERWMS
+
   if (ev == MG_EV_HTTP_MSG) {
-    std::lock_guard<std::mutex> lock = std::lock_guard<std::mutex>(RestServerWms::ret_mutex);
+    std::lock_guard<std::mutex> lock =
+        std::lock_guard<std::mutex>(RestServerWms::ret_mutex);
     ++RestServerWms::m_hitcount;
 
     struct mg_http_message* hm = (struct mg_http_message*)ev_data;
@@ -90,9 +90,8 @@ static void fn(struct mg_connection* c, int ev, void* ev_data, void* fn_data) {
                     "{hitcount:%lu}\n", RestServerWms::m_hitcount);
     } else if (mg_match(hm->uri, mg_str("/api/wms"), NULL)) {
       try {
-        if (mg_match(hm->uri, mg_str("favicon.ico"), NULL
-        )){
-          mg_http_reply(c, 404,"","");
+        if (mg_match(hm->uri, mg_str("favicon.ico"), NULL)) {
+          mg_http_reply(c, 404, "", "");
           return;
         }
 
@@ -111,11 +110,12 @@ static void fn(struct mg_connection* c, int ev, void* ev_data, void* fn_data) {
         // check for resizing
         int _w = std::stoi(strWidthPx);
         int _h = std::stoi(strHeightPx);
-        if (_w != RestServerWms::lastSize_W || _h != RestServerWms::lastSize_H){
+        if (_w != RestServerWms::lastSize_W ||
+            _h != RestServerWms::lastSize_H) {
           INFO_LOG << "Size req change  from (w,h)" << RestServerWms::lastSize_W
                    << ", " << RestServerWms::lastSize_H << " to " << _w << ", "
                    << _h;
- 
+
           RestServerWms::lastSize_W = _w;
           RestServerWms::lastSize_H = _h;
         }
@@ -149,7 +149,6 @@ static void fn(struct mg_connection* c, int ev, void* ev_data, void* fn_data) {
           lonNE = data[3];
 
         } else if (strSrs == "EPSG:3857") {
-          
           // coord convertion
           coord3857To4326(data[0], data[1], lonSW, latSW);
           coord3857To4326(data[2], data[3], lonNE, latNE);
@@ -157,13 +156,13 @@ static void fn(struct mg_connection* c, int ev, void* ev_data, void* fn_data) {
           std::string err = "Unsupported Srs param:" + strSrs;
 
           mg_http_reply(c, 422, "", err.c_str());
-              
+
           return;
-        }                    
-        
+        }
+
         INFO_LOG << "WMS req " << RestServerWms::m_hitcount << " SW:" << latSW
                  << "," << lonSW << " NE" << latNE << "," << lonNE
-                 << "(lat, lon)"; 
+                 << "(lat, lon)";
 
         WmsReqParams p;
         p.w = _w;
@@ -174,17 +173,15 @@ static void fn(struct mg_connection* c, int ev, void* ev_data, void* fn_data) {
         p.lonSW = lonSW;
         p.hitcount = RestServerWms::m_hitcount;
 
-        p.color = strColor; //DAY" "DUSK" "NIGHT"
-         
+        p.color = strColor;  // DAY" "DUSK" "NIGHT"
+
         p.c = c;
 
         RestServerWms::fCallback(p);
-      }
-      catch(const std::exception& ex){
+      } catch (const std::exception& ex) {
         int j = 0;
         ERROR_LOG << "std::exception in rendering, details:" << ex.what();
-      }
-      catch(...){
+      } catch (...) {
         int j = 0;
         ERROR_LOG << "... exception in rendering";
       }
@@ -192,14 +189,14 @@ static void fn(struct mg_connection* c, int ev, void* ev_data, void* fn_data) {
       mg_http_reply(c, 500, NULL, "\n");
     }
   }
-  #endif
+#endif
 }
 
 //========================================================================
 /* RestServer implementation */
 
 void RestServerWms::Run() {
-  #ifdef RESTSERVERWMS
+#ifdef RESTSERVERWMS
   struct mg_mgr mgr = {0};  // Event manager
   mg_log_set(MG_LL_DEBUG);  // Set log level
   mg_mgr_init(&mgr);        // Initialise event manager
@@ -209,26 +206,27 @@ void RestServerWms::Run() {
   mg_http_listen(&mgr, ServerAddr, fn, this);
 
   while (m_alive) {
-    mg_mgr_poll(&mgr, 1);  // Infinite event loop //TODO set the time depending on activity bursts, WMS often load 9 times rapidly
+    mg_mgr_poll(&mgr, 1);  // Infinite event loop //TODO set the time depending
+                           // on activity bursts, WMS often load 9 times rapidly
   }
   mg_mgr_free(&mgr);
-  #endif
+#endif
 }
 
 void RestServerWms::StopServer() {
-  m_alive = false; //TODO teardown might hang, need the rest_server style teardown 
+  m_alive =
+      false;  // TODO teardown might hang, need the rest_server style teardown
   if (m_workerthread.joinable()) {
     m_workerthread.join();
   }
 }
 
-RestServerWms::RestServerWms() {  
-  INFO_LOG << "RestServerWms consctuction, call to StartServer will start the rendering engine";
-}   
-
-RestServerWms::~RestServerWms() {
-  StopServer();
+RestServerWms::RestServerWms() {
+  INFO_LOG << "RestServerWms consctuction, call to StartServer will start the "
+              "rendering engine";
 }
+
+RestServerWms::~RestServerWms() { StopServer(); }
 
 bool RestServerWms::StartServer(std::function<void(WmsReqParams)> FCallback) {
   RestServerWms::fCallback = FCallback;
