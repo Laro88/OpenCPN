@@ -1,7 +1,7 @@
 Extends the excellent OpenCPN project with the ability to act as a WMS server.
 
 Remember NOT to use any charts that you don't have legal access to.
-Rendering speed is limited, if you need fast rendering then use one of the 
+Rendering speed is limited, if you need fast rendering then use one of the commercial engines
 
 Work in progress!
 
@@ -17,3 +17,11 @@ Coordinates will be messed up slightly
 
 Sidenote:
 Could be used for rendering a "view only" set for low power up devices, might try to do that on a small esp32 based 4" thing if I get bored. Just another layer.
+
+Tech for the WMS explanation:
+rest_server_wms.h & cpp runs a thread that starts a mongoose listener on port 8091 and extracts wms requests.
+The request params are put into a WmsReqParams struct and passed to the gui thread using a callback (all done to get the ui rendering done in the WXWidgets gui thread)
+the OpenCPN "main thingomobob" ocpn_app.h & cpp eventifies (EventifyWmsReqParam) the WmsReqParams to make it a WXWidgets event.
+Finally the WmsFframe (that has a handle to the primary ui) receives the event at set the coordinates and sizes etc. in a couple of calls in OnWmsRequestEvent
+Eventually the graphics is captured and returned to the WMS client consuming the image.
+
