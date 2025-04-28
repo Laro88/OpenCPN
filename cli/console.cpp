@@ -81,16 +81,15 @@
 
 void* g_pi_manager = reinterpret_cast<void*>(1L);
 
-class NmeaLogDummy: public NmeaLog {
-  bool Active() const { return false; }
-  void Add(const wxString& s) {};
+class NmeaLogDummy : public NmeaLog {
+  bool IsVisible() const { return false; }
+  void Add(const Logline& s) {};
 };
 
 static void InitRouteman() {
   struct RoutePropDlgCtx ctx;
   auto RouteMgrDlgUpdateListCtrl = [&]() {};
-  static  NmeaLogDummy dummy_log;
-  g_pRouteMan = new Routeman(ctx, RoutemanDlgCtx(), dummy_log);
+  g_pRouteMan = new Routeman(ctx, RoutemanDlgCtx());
 }
 
 static const char* USAGE = R"""(
@@ -151,11 +150,9 @@ static const char* const DOWNLOAD_REPO_PROTO =
 wxDEFINE_EVENT(EVT_FOO, wxCommandEvent);
 wxDEFINE_EVENT(EVT_BAR, wxCommandEvent);
 
-
 using namespace std;
 
 class CliApp : public wxAppConsole {
-
 public:
   CliApp() : wxAppConsole() {
     CheckBuildOptions(WX_BUILD_OPTIONS_SIGNATURE, "program");
@@ -180,7 +177,7 @@ public:
     pSelect = new Select();
     pRouteList = new RouteList;
     InitRouteman();
-    auto colour_func = [] (wxString c) { return *wxBLACK; };
+    auto colour_func = [](wxString c) { return *wxBLACK; };
     pWayPointMan = new WayPointman(colour_func);
   }
 
@@ -188,13 +185,13 @@ public:
     using namespace std;
     wxImage::AddHandler(new wxPNGHandler());
     g_BasePlatform->GetSharedDataDir();  // See #2619
-    PluginLoader::getInstance()->LoadAllPlugIns(false);
+    PluginLoader::GetInstance()->LoadAllPlugIns(false);
     auto plugins = PluginHandler::getInstance()->getInstalled();
     for (const auto& p : plugins) {
       if (p.version == "0.0") continue;
       auto path = PluginHandler::ImportedMetadataPath(p.name);
       std::string suffix(ocpn::exists(path) ? "[imported]" : "");
-      cout << left << setw(25) << p.name << p.version << suffix  << "\n";
+      cout << left << setw(25) << p.name << p.version << suffix << "\n";
     }
   }
 
@@ -212,7 +209,7 @@ public:
   void uninstall_plugin(const std::string& plugin) {
     using namespace std;
     g_BasePlatform->GetSharedDataDir();  // See #2619
-    PluginLoader::getInstance()->LoadAllPlugIns(false);
+    PluginLoader::GetInstance()->LoadAllPlugIns(false);
     auto plugins = PluginHandler::getInstance()->getInstalled();
     vector<PluginMetadata> found;
     copy_if(plugins.begin(), plugins.end(), back_inserter(found),
@@ -246,9 +243,9 @@ public:
     std::ofstream file(metadata_path);
     file << metadata.to_string();
     if (!file.good()) {
-       std::cerr << "Error saving metadata file: " << metadata_path
+      std::cerr << "Error saving metadata file: " << metadata_path
                 << " for imported plugin: " << metadata.name;
-       exit(2);
+      exit(2);
     }
     exit(0);
   }
@@ -286,7 +283,7 @@ public:
   }
 
   bool load_plugin(const std::string& plugin) {
-    auto loader = PluginLoader::getInstance();
+    auto loader = PluginLoader::GetInstance();
     wxImage::AddHandler(new wxPNGHandler());
     g_BasePlatform->GetSharedDataDir();  // See #2619
     wxDEFINE_EVENT(EVT_FILE_NOTFOUND, wxCommandEvent);
@@ -356,8 +353,8 @@ public:
     int numkey;
     try {
       numkey = std::stoi(key);
-    } catch(...) {
-      std::cerr << "Cannot parse key:"  << key << "\n";
+    } catch (...) {
+      std::cerr << "Cannot parse key:" << key << "\n";
       exit(1);
     }
     Pincode pincode(numkey);

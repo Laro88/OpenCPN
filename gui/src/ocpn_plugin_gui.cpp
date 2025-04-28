@@ -38,6 +38,7 @@
 #include "model/comm_navmsg_bus.h"
 #include "model/idents.h"
 #include "model/multiplexer.h"
+#include "model/notification_manager.h"
 #include "model/own_ship.h"
 #include "model/plugin_comm.h"
 #include "model/route.h"
@@ -119,6 +120,7 @@ extern ChartCanvas* g_overlayCanvas;
 extern bool g_bquiting;
 extern bool g_disable_main_toolbar;
 extern bool g_btenhertz;
+extern bool g_CanvasHideNotificationIcon;
 
 WX_DEFINE_ARRAY_PTR(ChartCanvas*, arrayofCanvasPtr);
 extern arrayofCanvasPtr g_canvasArray;
@@ -742,6 +744,21 @@ wxString getUsrWindSpeedUnit_Plugin(int unit) {
 }
 
 wxString getUsrTempUnit_Plugin(int unit) { return getUsrTempUnit(unit); }
+
+/*
+ * Depth Conversion Functions
+ */
+double toUsrDepth_Plugin(double m_depth, int unit) {
+  return toUsrDepth(m_depth, unit);
+}
+
+double fromUsrDepth_Plugin(double usr_depth, int unit) {
+  return fromUsrDepth(usr_depth, unit);
+}
+
+wxString getUsrDepthUnit_Plugin(int unit) { return getUsrDepthUnit(unit); }
+
+double fromDMM_PlugIn(wxString sdms) { return fromDMM(sdms); }
 
 bool PlugIn_GSHHS_CrossesLand(double lat1, double lon1, double lat2,
                               double lon2) {
@@ -2754,4 +2771,11 @@ void ConfigFlushAndReload() {
       }
     }
   }
+}
+
+/**
+ * Plugin Notification Framework GUI support
+ */
+void EnableNotificationCanvasIcon(bool enable) {
+  g_CanvasHideNotificationIcon = !enable;
 }

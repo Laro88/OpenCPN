@@ -24,7 +24,7 @@
 #include <wx/dialog.h>
 #include <wx/html/htmlwin.h>
 #include <wx/sizer.h>
-#include <wx/stattext.h>
+#include <wx/statline.h>
 #include <wx/string.h>
 
 #include "dialog_base.h"
@@ -37,11 +37,18 @@ BaseDialog::BaseDialog(wxWindow* parent, const std::string& title, long style)
 
   // Add content sizer to layout
   m_content = new wxBoxSizer(wxVERTICAL);
-  m_layout->Add(m_content, wxSizerFlags().Border(
-                               wxALL, GUI::GetSpacing(this, kDialogPadding)));
+  auto spacing = GUI::GetSpacing(this, kDialogPadding);
+  m_layout->Add(m_content, wxSizerFlags().Border(wxALL, spacing).Expand());
 
-  // Handle layout resize event
+  auto separator = new wxStaticLine(this, wxID_ANY, wxDefaultPosition,
+                                    wxDefaultSize, wxLI_HORIZONTAL);
+
+  m_layout->Add(separator, wxSizerFlags().Border(wxALL, spacing).Expand());
+
   Bind(EVT_LAYOUT_RESIZE, [&](wxCommandEvent&) { Layout(); });
+  Bind(wxEVT_HTML_LINK_CLICKED, [this](wxHtmlLinkEvent& event) {
+    wxLaunchDefaultBrowser(event.GetLinkInfo().GetHref());
+  });
 }
 
 void BaseDialog::SetInitialSize() {
@@ -60,18 +67,11 @@ void BaseDialog::SetInitialSize() {
       size = wxSize((rect.GetWidth() / 2), -1);
       break;
     default:
-      size = wxSize((rect.GetWidth() / 3), -1);
+      size = wxSize((rect.GetWidth() / 4), -1);
       break;
   }
 
   wxDialog::SetInitialSize(size);
-}
-
-int BaseDialog::ShowModal() {
-  Fit();
-  Center(wxBOTH | wxCENTER_FRAME);
-
-  return wxDialog::ShowModal();
 }
 
 void BaseDialog::AddHtmlContent(const std::stringstream& html) {
@@ -82,7 +82,9 @@ void BaseDialog::AddHtmlContent(const std::stringstream& html) {
   assert(result && "BaseDialog: HTML page not added");
 
   int html_width, html_height;
+  html_window->SetBorders(0);
   html_window->GetVirtualSize(&html_width, &html_height);
+  html_width += GUI::GetSpacing(this, kDialogPadding * 2);  // prevent scrollbar
   html_window->SetMinSize(
       wxSize(html_width, html_height));  // Fit() needs this size!
   html_window->SetBackgroundColour(GetBackgroundColour());

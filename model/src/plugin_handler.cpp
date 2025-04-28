@@ -375,7 +375,7 @@ PluginHandler::PluginHandler() {}
 bool PluginHandler::isCompatible(const PluginMetadata& metadata, const char* os,
                                  const char* os_version) {
   static const SemanticVersion kMinApi = SemanticVersion(1, 16);
-  static const SemanticVersion kMaxApi = SemanticVersion(1, 19);
+  static const SemanticVersion kMaxApi = SemanticVersion(1, 20);
   auto plugin_api = SemanticVersion::parse(metadata.api_version);
   if (plugin_api.major == -1) {
     DEBUG_LOG << "Cannot parse API version \"" << metadata.api_version << "\"";
@@ -523,6 +523,7 @@ static bool win_entry_set_install_path(struct archive_entry* entry,
   using namespace std;
 
   string path = archive_entry_pathname(entry);
+  bool is_library = false;
 
   // Check # components, drop the single top-level path
   int slashes = count(path.begin(), path.end(), '/');
@@ -549,6 +550,7 @@ static bool win_entry_set_install_path(struct archive_entry* entry,
     slashpos = path.find_first_of('/');
     path = path.substr(slashpos + 1);
     path = installPaths["bin"] + "\\" + path;
+    is_library = true;
   } else if (ocpn::startswith(path, "share")) {
     // The "share" directory should be a direct sibling of "plugins" directory
     wxFileName fn(installPaths["share"].c_str(),
@@ -566,6 +568,10 @@ static bool win_entry_set_install_path(struct archive_entry* entry,
     msg += wxString(path.c_str());
     DEBUG_LOG << msg;
     return false;
+  }
+  if (is_library) {
+    wxFileName nm(path);
+    PluginLoader::MarkAsLoadable(nm.GetName().ToStdString());
   }
   wxString s(path);
   s.Replace("/", "\\");  // std::regex_replace FTBS on gcc 4.8.4
@@ -602,6 +608,12 @@ static bool flatpak_entry_set_install_path(struct archive_entry* entry,
   }
   string dest = installPaths[location] + "/" + suffix;
   archive_entry_set_pathname(entry, dest.c_str());
+
+  PluginPaths* paths = PluginPaths::getInstance();
+  if (dest.find(paths->UserLibdir()) != std::string::npos) {
+    wxFileName nm(path);
+    PluginLoader::MarkAsLoadable(nm.GetName().ToStdString());
+  }
 
   return true;
 }
@@ -640,6 +652,7 @@ static bool linux_entry_set_install_path(struct archive_entry* entry,
     return false;
   }
 
+  bool is_library = false;
   string dest = installPaths[location] + "/" + suffix;
 
   if (g_bportable) {
@@ -655,10 +668,20 @@ static bool linux_entry_set_install_path(struct archive_entry* entry,
     if (ocpn::startswith(location, "lib") &&
         ocpn::startswith(suffix, "opencpn/")) {
       suffix = suffix.substr(8);
-
       dest = g_BasePlatform->GetPrivateDataDir().ToStdString() +
              "/plugins/lib/" + suffix;
+      is_library = true;
     }
+  } else {
+    if (ocpn::startswith(location, "lib") &&
+        ocpn::startswith(suffix, "opencpn/") && ocpn::endswith(suffix, ".so")) {
+      is_library = true;
+    }
+  }
+
+  if (is_library) {
+    wxFileName nm(suffix);
+    PluginLoader::MarkAsLoadable(nm.GetName().ToStdString());
   }
 
   archive_entry_set_pathname(entry, dest.c_str());
@@ -674,6 +697,7 @@ static bool apple_entry_set_install_path(struct archive_entry* entry,
 
   string path = archive_entry_pathname(entry);
   if (ocpn::startswith(path, "./")) path = path.substr(2);
+  bool is_library = false;
 
   string dest("");
   size_t slashes = count(path.begin(), path.end(), '/');
@@ -695,6 +719,7 @@ static bool apple_entry_set_install_path(struct archive_entry* entry,
     parts = split(path, "Contents/PlugIns");
     if (parts.size() >= 2) {
       dest = base + "/Contents/PlugIns" + parts[1];
+      is_library = true;
     }
   }
   if (dest == "" && archive_entry_filetype(entry) == AE_IFREG) {
@@ -704,6 +729,11 @@ static bool apple_entry_set_install_path(struct archive_entry* entry,
     return false;
   }
   archive_entry_set_pathname(entry, dest.c_str());
+  if (is_library) {
+    wxFileName nm(dest);
+    PluginLoader::MarkAsLoadable(nm.GetName().ToStdString());
+  }
+
   return true;
 }
 
@@ -711,6 +741,7 @@ static bool android_entry_set_install_path(struct archive_entry* entry,
                                            pathmap_t installPaths) {
   using namespace std;
 
+  bool is_library = false;
   string path = archive_entry_pathname(entry);
   int slashes = count(path.begin(), path.end(), '/');
   if (slashes < 2) {
@@ -745,6 +776,7 @@ static bool android_entry_set_install_path(struct archive_entry* entry,
   if ((location == "lib") && ocpn::startswith(suffix, "opencpn")) {
     auto parts = split(suffix, "/");
     if (parts.size() == 2) suffix = parts[1];
+    is_library = true;
   }
 
   if ((location == "share") && ocpn::startswith(suffix, "opencpn")) {
@@ -756,6 +788,10 @@ static bool android_entry_set_install_path(struct archive_entry* entry,
   string dest = installPaths[location] + "/" + suffix;
 
   archive_entry_set_pathname(entry, dest.c_str());
+  if (is_library) {
+    wxFileName nm(suffix);
+    PluginLoader::MarkAsLoadable(nm.GetName().ToStdString());
+  }
   return true;
 }
 
@@ -920,7 +956,7 @@ bool PluginHandler::isPluginWritable(std::string name) {
   if (isRegularFile(PluginHandler::fileListPath(name).c_str())) {
     return true;
   }
-  auto loader = PluginLoader::getInstance();
+  auto loader = PluginLoader::GetInstance();
   return PlugInIxByName(name, loader->GetPlugInArray()) == -1;
 }
 
@@ -1140,7 +1176,7 @@ const std::vector<PluginMetadata> PluginHandler::getInstalled() {
   using namespace std;
   vector<PluginMetadata> plugins;
 
-  auto loader = PluginLoader::getInstance();
+  auto loader = PluginLoader::GetInstance();
   for (unsigned int i = 0; i < loader->GetPlugInArray()->GetCount(); i += 1) {
     const PlugInContainer* p = loader->GetPlugInArray()->Item(i);
     PluginMetadata plugin;
@@ -1163,7 +1199,7 @@ const std::vector<PluginMetadata> PluginHandler::getInstalled() {
 }
 
 void PluginHandler::SetInstalledMetadata(const PluginMetadata& pm) {
-  auto loader = PluginLoader::getInstance();
+  auto loader = PluginLoader::GetInstance();
   ssize_t ix = PlugInIxByName(pm.name, loader->GetPlugInArray());
   if (ix == -1) return;  // no such plugin
 
@@ -1184,7 +1220,6 @@ bool PluginHandler::installPlugin(PluginMetadata plugin, std::string path) {
   saveFilelist(filelist, plugin.name);
   saveDirlist(plugin.name);
   saveVersion(plugin.name, plugin.version);
-
   return true;
 }
 
@@ -1250,7 +1285,7 @@ bool PluginHandler::ExtractMetadata(const std::string& path,
 
 bool PluginHandler::ClearInstallData(const std::string plugin_name) {
   auto ix = PlugInIxByName(plugin_name,
-                           PluginLoader::getInstance()->GetPlugInArray());
+                           PluginLoader::GetInstance()->GetPlugInArray());
   if (ix != -1) {
     MESSAGE_LOG << "Attempt to remove installation data for loaded plugin";
     return false;
@@ -1289,7 +1324,7 @@ bool PluginHandler::DoClearInstallData(const std::string plugin_name) {
 bool PluginHandler::uninstall(const std::string plugin_name) {
   using namespace std;
 
-  auto loader = PluginLoader::getInstance();
+  auto loader = PluginLoader::GetInstance();
   auto ix = PlugInIxByName(plugin_name, loader->GetPlugInArray());
   if (ix < 0) {
     MESSAGE_LOG << "trying to uninstall non-existing plugin " << plugin_name;

@@ -1,12 +1,6 @@
-/***************************************************************************
- *
- * Project:  OpenCPN
- * Purpose:  PlugIn Manager Object
- * Author:   David Register
- *
- ***************************************************************************
+/**************************************************************************
  *   Copyright (C) 2010 by David S. Register                               *
- *   Copyright (C) 2022 Alec Leamas                                        *
+ *   Copyright (C) 2022-2025 Alec Leamas                                   *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -23,6 +17,11 @@
  *   Free Software Foundation, Inc.,                                       *
  *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,  USA.         *
  **************************************************************************/
+
+/**
+ * \file
+ * Implement config_loader.h
+ */
 
 #include "config.h"
 
@@ -72,6 +71,7 @@
 #include "model/safe_mode.h"
 #include "model/semantic_vers.h"
 #include "observable_confvar.h"
+#include "std_filesystem.h"
 
 #ifdef __ANDROID__
 #include "androidUTIL.h"
@@ -89,8 +89,7 @@ static const std::vector<std::string> SYSTEM_PLUGINS = {
 /** Return complete PlugInContainer matching pic. */
 static PlugInContainer* GetContainer(const PlugInData& pd,
                                      const ArrayOfPlugIns& plugin_array) {
-  for (size_t i = 0; i < plugin_array.GetCount(); i++) {
-    const auto& p = plugin_array.Item(i);
+  for (const auto& p : plugin_array) {
     if (p->m_common_name == pd.m_common_name) return p;
   }
   return nullptr;
@@ -119,7 +118,7 @@ static bool IsSystemPluginName(const std::string& name) {
 static std::string GetInstalledVersion(const PlugInData& pd) {
   std::string path = PluginHandler::versionPath(pd.m_common_name.ToStdString());
   if (path == "" || !wxFileName::IsFileReadable(path)) {
-    auto loader = PluginLoader::getInstance();
+    auto loader = PluginLoader::GetInstance();
     auto pic = GetContainer(pd, *loader->GetPlugInArray());
     if (!pic || !pic->m_pplugin) {
       return SemanticVersion(0, 0, -1).to_string();
@@ -135,6 +134,7 @@ static std::string GetInstalledVersion(const PlugInData& pd) {
   return version;
 }
 
+/** Return metadata corresponding to a PlugInContainer. */
 static PluginMetadata CreateMetadata(const PlugInContainer* pic) {
   auto catalogHdlr = CatalogHandler::getInstance();
 
@@ -151,10 +151,43 @@ static PluginMetadata CreateMetadata(const PlugInContainer* pic) {
   return mdata;
 }
 
+/** Return path for loadstamp file created when loading. */
+static fs::path LoadStampPath(const std::string& file_path) {
+  fs::path path(g_BasePlatform->DefaultPrivateDataDir().ToStdString());
+  path = path / "load_stamps";
+  if (!ocpn::exists(path.string())) {
+    ocpn::mkdir(path.string());
+  }
+  path /= file_path;
+  return path.parent_path() / path.stem();
+}
+
+static void CreateLoadStamp(const std::string& filename) {
+  std::ofstream(LoadStampPath(filename).string());
+}
+
+static bool HasLoadStamp(const std::string& filename) {
+  return exists(LoadStampPath(filename));
+}
+
+static void ClearLoadStamp(const std::string& filename) {
+  if (filename.empty()) return;
+  auto path = LoadStampPath(filename);
+  if (exists(path)) {
+    if (!remove(path)) {
+      MESSAGE_LOG << " Cannot remove load stamp file: " << path;
+    }
+  }
+}
+
+void PluginLoader::MarkAsLoadable(const std::string& library_path) {
+  ClearLoadStamp(library_path);
+}
+
 std::string PluginLoader::GetPluginVersion(
     const PlugInData pd,
     std::function<const PluginMetadata(const std::string&)> get_metadata) {
-  auto loader = PluginLoader::getInstance();
+  auto loader = PluginLoader::GetInstance();
   auto pic = GetContainer(pd, *loader->GetPlugInArray());
   if (!pic) {
     return SemanticVersion(0, 0, -1).to_string();
@@ -292,7 +325,7 @@ static void ProcessLateInit(PlugInContainer* pic) {
   }
 }
 
-PluginLoader* PluginLoader::getInstance() {
+PluginLoader* PluginLoader::GetInstance() {
   static PluginLoader* instance = nullptr;
 
   if (!instance) instance = new PluginLoader();
@@ -309,8 +342,7 @@ PluginLoader::PluginLoader()
 }
 
 bool PluginLoader::IsPlugInAvailable(const wxString& commonName) {
-  for (unsigned int i = 0; i < plugin_array.GetCount(); i++) {
-    PlugInContainer* pic = plugin_array[i];
+  for (auto* pic : plugin_array) {
     if (pic && pic->m_enabled && (pic->m_common_name == commonName))
       return true;
   }
@@ -319,7 +351,7 @@ bool PluginLoader::IsPlugInAvailable(const wxString& commonName) {
 
 void PluginLoader::ShowPreferencesDialog(const PlugInData& pd,
                                          wxWindow* parent) {
-  auto loader = PluginLoader::getInstance();
+  auto loader = PluginLoader::GetInstance();
   auto pic = GetContainer(pd, *loader->GetPlugInArray());
   if (pic) pic->m_pplugin->ShowPreferencesDialog(parent);
 }
@@ -346,7 +378,7 @@ void PluginLoader::NotifySetupOptionsPlugin(const PlugInData* pd) {
             auto ppi = dynamic_cast<opencpn_plugin_19*>(pic->m_pplugin);
             if (ppi) {
               ppi->OnSetupOptions();
-              auto loader = PluginLoader::getInstance();
+              auto loader = PluginLoader::GetInstance();
               loader->SetToolboxPanel(pic->m_common_name, true);
             }
             break;
@@ -360,8 +392,7 @@ void PluginLoader::NotifySetupOptionsPlugin(const PlugInData* pd) {
 }
 
 void PluginLoader::SetEnabled(const wxString& common_name, bool enabled) {
-  for (size_t i = 0; i < plugin_array.GetCount(); i++) {
-    PlugInContainer* pic = plugin_array[i];
+  for (auto* pic : plugin_array) {
     if (pic->m_common_name == common_name) {
       pic->m_enabled = enabled;
       return;
@@ -370,8 +401,7 @@ void PluginLoader::SetEnabled(const wxString& common_name, bool enabled) {
 }
 
 void PluginLoader::SetToolboxPanel(const wxString& common_name, bool value) {
-  for (size_t i = 0; i < plugin_array.GetCount(); i++) {
-    PlugInContainer* pic = plugin_array[i];
+  for (auto* pic : plugin_array) {
     if (pic->m_common_name == common_name) {
       pic->m_toolbox_panel = value;
       return;
@@ -382,8 +412,7 @@ void PluginLoader::SetToolboxPanel(const wxString& common_name, bool value) {
 }
 
 void PluginLoader::SetSetupOptions(const wxString& common_name, bool value) {
-  for (size_t i = 0; i < plugin_array.GetCount(); i++) {
-    PlugInContainer* pic = plugin_array[i];
+  for (auto* pic : plugin_array) {
     if (pic->m_common_name == common_name) {
       pic->m_has_setup_options = value;
       return;
@@ -454,6 +483,14 @@ bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
                                        bool load_enabled) {
   wxString plugin_file = wxFileName(file_name).GetFullName();
   wxLogMessage("Checking plugin candidate: %s", file_name.mb_str().data());
+
+  wxString plugin_loadstamp = wxFileName(file_name).GetName();
+  if (HasLoadStamp(plugin_loadstamp.ToStdString())) {
+    MESSAGE_LOG << "Refusing to load " << file_name
+                << " failed at last attempt";
+    return false;
+  }
+  CreateLoadStamp(plugin_loadstamp.ToStdString());
   wxDateTime plugin_modification = wxFileName(file_name).GetModificationTime();
   wxLog::FlushActive();
 
@@ -470,7 +507,6 @@ bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
   PlugInContainer* loaded_pic = nullptr;
   for (unsigned int i = 0; i < plugin_array.GetCount(); i++) {
     PlugInContainer* pic_test = plugin_array[i];
-
     // Checking for dynamically updated plugins
     if (pic_test->m_plugin_filename == plugin_file) {
       // Do not re-load same-name plugins from different directories.  Certain
@@ -498,7 +534,11 @@ bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
     }
   }
 
-  if (loaded) return true;
+  if (loaded) {
+    ClearLoadStamp(plugin_loadstamp.ToStdString());  // Not a fatal error
+    return true;
+  }
+
   // Avoid loading/testing legacy plugins installed in base plugin path.
   wxFileName fn_plugin_file(file_name);
   wxString plugin_file_path =
@@ -512,6 +552,8 @@ bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
       if (!IsSystemPluginPath(file_name.ToStdString())) {
         DEBUG_LOG << "Skipping plugin " << file_name << " in "
                   << g_BasePlatform->GetPluginDir();
+
+        ClearLoadStamp(plugin_loadstamp.ToStdString());  // Not a fatal error
         return false;
       }
     }
@@ -519,6 +561,7 @@ bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
 
   if (!IsSystemPluginPath(file_name.ToStdString()) && safe_mode::get_mode()) {
     DEBUG_LOG << "Skipping plugin " << file_name << " in safe mode";
+    ClearLoadStamp(plugin_loadstamp.ToStdString());  // Not a fatal error
     return false;
   }
 
@@ -551,6 +594,7 @@ bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
     pic->m_destroy_fn(pic->m_pplugin);
     delete pic;
     wxLogMessage("Skipping not enabled candidate.");
+    ClearLoadStamp(plugin_loadstamp.ToStdString());
     return true;
   }
 
@@ -645,6 +689,7 @@ bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
   } else {  // pic == 0
     return false;
   }
+  ClearLoadStamp(plugin_loadstamp.ToStdString());
   return true;
 }
 
@@ -695,10 +740,8 @@ bool PluginLoader::LoadPlugInDirectory(const wxString& plugin_dir,
   wxDir::GetAllFiles(m_plugin_location, &file_list, pispec, get_flags);
 
   wxLogMessage("Found %d candidates", (int)file_list.GetCount());
-  for (unsigned int i = 0; i < file_list.GetCount(); i++) {
+  for (auto& file_name : file_list) {
     wxLog::FlushActive();
-
-    wxString file_name = file_list[i];
 
     LoadPluginCandidate(file_name, load_enabled);
   }
@@ -738,9 +781,7 @@ bool PluginLoader::LoadPlugInDirectory(const wxString& plugin_dir,
 bool PluginLoader::UpdatePlugIns() {
   bool bret = false;
 
-  for (unsigned int i = 0; i < plugin_array.GetCount(); i++) {
-    PlugInContainer* pic = plugin_array[i];
-
+  for (const auto& pic : plugin_array) {
     // Try to confirm that the m_pplugin member points to a valid plugin
     // image...
     if (pic->m_pplugin) {
@@ -911,8 +952,7 @@ void PluginLoader::UpdatePlugin(PlugInContainer* plugin,
 
 void PluginLoader::UpdateManagedPlugins(bool keep_orphans) {
   std::vector<PlugInContainer*> loaded_plugins;
-  for (size_t i = 0; i < plugin_array.GetCount(); i++)
-    loaded_plugins.push_back(plugin_array.Item(i));
+  for (auto& p : plugin_array) loaded_plugins.push_back(p);
 
   // Initiate status to "unmanaged" or "system" on all plugins
   for (auto& p : loaded_plugins) {
@@ -979,8 +1019,7 @@ bool PluginLoader::UnLoadAllPlugIns() {
 }
 
 bool PluginLoader::DeactivateAllPlugIns() {
-  for (unsigned int i = 0; i < plugin_array.GetCount(); i++) {
-    PlugInContainer* pic = plugin_array[i];
+  for (auto* pic : plugin_array) {
     if (pic && pic->m_enabled && pic->m_init_state) DeactivatePlugIn(pic);
   }
   return true;
@@ -1586,6 +1625,10 @@ PlugInContainer* PluginLoader::LoadPlugIn(const wxString& plugin_file,
 
     case 119:
       pic->m_pplugin = dynamic_cast<opencpn_plugin_119*>(plug_in);
+      break;
+
+    case 120:
+      pic->m_pplugin = dynamic_cast<opencpn_plugin_120*>(plug_in);
       break;
 
     default:

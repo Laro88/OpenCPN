@@ -185,8 +185,9 @@ static int wxCALLBACK SortTracksOnDate(wxIntPtr item1, wxIntPtr item2,
 int wxCALLBACK SortTracksOnDate(long item1, long item2, long list)
 #endif
 {
-  return SortRouteTrack(sort_track_date_dir, ((Track *)item1)->GetDate(),
-                        ((Track *)item2)->GetDate());
+  // Sort date/time using ISO format, which is sortable as a string.
+  return SortRouteTrack(sort_track_date_dir, ((Track *)item1)->GetIsoDateTime(),
+                        ((Track *)item2)->GetIsoDateTime());
 }
 
 static int sort_wp_key;
@@ -1964,6 +1965,11 @@ void RouteManagerDialog::OnTrkMenuSelected(wxCommandEvent &event) {
         mergeList.push_back(track);
       }
 
+      if (!mergeList.size()) {
+        ::wxEndBusyCursor();
+        break;
+      }
+
       std::sort(mergeList.begin(), mergeList.end(), CompareTracks);
 
       targetTrack = mergeList[0];
@@ -2064,7 +2070,9 @@ void RouteManagerDialog::UpdateTrkListCtrl() {
     long idx = m_pTrkListCtrl->InsertItem(li);
 
     m_pTrkListCtrl->SetItem(idx, colTRKNAME, trk->GetName(true));
-    m_pTrkListCtrl->SetItem(idx, colTRKDATE, trk->GetDate(true));
+    // Populate the track start date/time, formatted using the global timezone
+    // settings.
+    m_pTrkListCtrl->SetItem(idx, colTRKDATE, trk->GetDateTime());
 
     wxString len;
     len.Printf(wxT("%5.2f"), trk->Length());
@@ -2616,7 +2624,7 @@ void RouteManagerDialog::OnWptNewClick(wxCommandEvent &event) {
   pConfig->AddNewWayPoint(pWP, -1);  // use auto next num
   gFrame->RefreshAllCanvas();
 
-  // g_pMarkInfoDialog = MarkInfoImpl::getInstance( GetParent() );
+  // g_pMarkInfoDialog = MarkInfoImpl::GetInstance( GetParent() );
   // There is on global instance of the MarkProp Dialog
   if (!g_pMarkInfoDialog) g_pMarkInfoDialog = new MarkInfoDlg(GetParent());
 
