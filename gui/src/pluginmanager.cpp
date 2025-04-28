@@ -94,6 +94,7 @@ typedef __LA_INT64_T la_int64_t;  //  "older" libarchive versions support
 #include "model/comm_navmsg_bus.h"
 #include "model/comm_vars.h"
 #include "model/config_vars.h"
+#include "model/datetime.h"
 #include "model/downloader.h"
 #include "model/georef.h"
 #include "model/json_event.h"
@@ -487,20 +488,20 @@ static std::vector<PluginMetadata> getUpdates(const char* name) {
 /** Remove plugin and update GUI elements. */
 static void gui_uninstall(const PlugInData* pic, const char* plugin) {
   g_Platform->ShowBusySpinner();
-  PluginLoader::getInstance()->DeactivatePlugIn(*pic);
-  PluginLoader::getInstance()->SetEnabled(pic->m_common_name, false);
-  PluginLoader::getInstance()->UpdatePlugIns();
+  PluginLoader::GetInstance()->DeactivatePlugIn(*pic);
+  PluginLoader::GetInstance()->SetEnabled(pic->m_common_name, false);
+  PluginLoader::GetInstance()->UpdatePlugIns();
 
   wxLogMessage("Uninstalling %s", plugin);
   PluginHandler::getInstance()->uninstall(plugin);
-  PluginLoader::getInstance()->UpdatePlugIns();
+  PluginLoader::GetInstance()->UpdatePlugIns();
   g_Platform->HideBusySpinner();
 }
 
 static bool LoadAllPlugIns(bool load_enabled, bool keep_orphans = false) {
   g_Platform->ShowBusySpinner();
   bool b =
-      PluginLoader::getInstance()->LoadAllPlugIns(load_enabled, keep_orphans);
+      PluginLoader::GetInstance()->LoadAllPlugIns(load_enabled, keep_orphans);
   g_Platform->HideBusySpinner();
   return b;
 }
@@ -508,7 +509,7 @@ static bool LoadAllPlugIns(bool load_enabled, bool keep_orphans = false) {
 /** Unload and uninstall plugin with given name. */
 static void UninstallPlugin(const std::string& name) {
   auto handler = PluginHandler::getInstance();
-  auto loader = PluginLoader::getInstance();
+  auto loader = PluginLoader::GetInstance();
   auto finder = [name](const PluginMetadata pm) { return pm.name == name; };
   const auto& installed = handler->getInstalled();
   auto found = std::find_if(installed.begin(), installed.end(), finder);
@@ -611,7 +612,7 @@ static void run_update_dialog(PluginListPanel* parent, const PlugInData* pic,
           // Undocumented debug hook
           continue;
         }
-        auto loader = PluginLoader::getInstance();
+        auto loader = PluginLoader::GetInstance();
         if (!loader->CheckPluginCompatibility(str)) {
           wxString msg =
               _("The plugin is not compatible with this version of OpenCPN, "
@@ -729,7 +730,7 @@ void pluginUtilHandler::OnPluginUtilAction(wxCommandEvent& event) {
   // Perform the indicated action according to the verb...
   switch (panel->GetAction()) {
     case ActionVerb::UPGRADE_TO_MANAGED_VERSION: {
-      auto loader = PluginLoader::getInstance();
+      auto loader = PluginLoader::GetInstance();
 
       // capture the plugin name
       std::string pluginName = actionPIC->m_managed_metadata.name;
@@ -781,7 +782,7 @@ void pluginUtilHandler::OnPluginUtilAction(wxCommandEvent& event) {
     }
 
     case ActionVerb::UNINSTALL_MANAGED_VERSION: {
-      PluginLoader::getInstance()->DeactivatePlugIn(*actionPIC);
+      PluginLoader::GetInstance()->DeactivatePlugIn(*actionPIC);
 
       // Capture the confirmation dialog contents before the plugin goes away
       wxString message;
@@ -796,7 +797,7 @@ void pluginUtilHandler::OnPluginUtilAction(wxCommandEvent& event) {
           actionPIC->m_managed_metadata.name);
 
       //  Reload all plugins, which will bring in the action results.
-      auto loader = PluginLoader::getInstance();
+      auto loader = PluginLoader::GetInstance();
       LoadAllPlugIns(false);
       plugin_list_panel->ReloadPluginPanels();
 
@@ -1037,7 +1038,7 @@ wxDEFINE_EVENT(EVT_UPDATE_CHART_TYPES, wxCommandEvent);
 wxDEFINE_EVENT(EVT_PLUGIN_LOADALL_FINALIZE, wxCommandEvent);
 
 void PlugInManager::HandlePluginLoaderEvents() {
-  auto loader = PluginLoader::getInstance();
+  auto loader = PluginLoader::GetInstance();
 
   evt_blacklisted_plugin_listener.Listen(loader->evt_blacklisted_plugin, this,
                                          EVT_BLACKLISTED_PLUGIN);
@@ -1099,7 +1100,7 @@ wxDEFINE_EVENT(EVT_DOWNLOAD_FAILED, wxCommandEvent);
 wxDEFINE_EVENT(EVT_DOWNLOAD_OK, wxCommandEvent);
 
 void PlugInManager::HandlePluginHandlerEvents() {
-  auto loader = PluginLoader::getInstance();
+  auto loader = PluginLoader::GetInstance();
 
   evt_download_failed_listener.Listen(loader->evt_update_chart_types, this,
                                       EVT_DOWNLOAD_FAILED);
@@ -1122,7 +1123,7 @@ void PlugInManager::HandlePluginHandlerEvents() {
 bool PlugInManager::CallLateInit(void) {
   bool bret = true;
 
-  auto plugin_array = PluginLoader::getInstance()->GetPlugInArray();
+  auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
   for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
     PlugInContainer* pic = (*plugin_array)[i];
 
@@ -1137,6 +1138,7 @@ bool PlugInManager::CallLateInit(void) {
       case 117:
       case 118:
       case 119:
+      case 120:
         ProcessLateInit(pic);
         break;
     }
@@ -1186,7 +1188,7 @@ void PlugInManager::OnPluginDeactivate(const PlugInContainer* pic) {
 bool PlugInManager::IsAnyPlugInChartEnabled() {
   //  Is there a PlugIn installed and active that implements PlugIn Chart
   //  type(s)?
-  auto plugin_array = PluginLoader::getInstance()->GetPlugInArray();
+  auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
   for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
     PlugInContainer* pic = (*plugin_array)[i];
     if (pic->m_enabled && pic->m_init_state) {
@@ -1199,8 +1201,8 @@ bool PlugInManager::IsAnyPlugInChartEnabled() {
 }
 
 void PlugInManager::UpdateManagedPlugins() {
-  PluginLoader::getInstance()->UpdateManagedPlugins(false);
-  PluginLoader::getInstance()->SortPlugins(ComparePlugins);
+  PluginLoader::GetInstance()->UpdateManagedPlugins(false);
+  PluginLoader::GetInstance()->SortPlugins(ComparePlugins);
 
   if (m_listPanel) m_listPanel->ReloadPluginPanels();
   g_options->itemBoxSizerPanelPlugins->Layout();
@@ -1210,7 +1212,7 @@ bool PlugInManager::UpDateChartDataTypes() {
   bool bret = false;
   if (NULL == ChartData) return bret;
 
-  auto plugin_array = PluginLoader::getInstance()->GetPlugInArray();
+  auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
   for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
     PlugInContainer* pic = plugin_array->Item(i);
 
@@ -1259,7 +1261,7 @@ void PlugInManager::SetPluginOrder(wxString serialized_names) {
 
 wxString PlugInManager::GetPluginOrder() {
   wxString plugins = wxEmptyString;
-  auto plugin_array = PluginLoader::getInstance()->GetPlugInArray();
+  auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
   for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
     plugins.Append(plugin_array->Item(i)->m_common_name);
     if (i < plugin_array->GetCount() - 1) plugins.Append(';');
@@ -1271,7 +1273,7 @@ bool PlugInManager::UpdateConfig() {
   //    pConfig->SetPath( _T("/PlugIns/") );
   //    pConfig->Write( _T("PluginOrder"), GetPluginOrder() );
 
-  auto plugin_array = PluginLoader::getInstance()->GetPlugInArray();
+  auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
   for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
     PlugInContainer* pic = plugin_array->Item(i);
 
@@ -1326,7 +1328,7 @@ bool PlugInManager::RenderAllCanvasOverlayPlugIns(ocpnDC& dc,
                                                   const ViewPort& vp,
                                                   int canvasIndex,
                                                   int priority) {
-  auto plugin_array = PluginLoader::getInstance()->GetPlugInArray();
+  auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
   for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
     PlugInContainer* pic = plugin_array->Item(i);
     if (pic->m_enabled && pic->m_init_state) {
@@ -1380,7 +1382,8 @@ bool PlugInManager::RenderAllCanvasOverlayPlugIns(ocpnDC& dc,
               break;
             }
             case 118:
-            case 119: {
+            case 119:
+            case 120: {
               if (priority <= 0) {
                 opencpn_plugin_18* ppi =
                     dynamic_cast<opencpn_plugin_18*>(pic->m_pplugin);
@@ -1459,7 +1462,8 @@ bool PlugInManager::RenderAllCanvasOverlayPlugIns(ocpnDC& dc,
               break;
             }
             case 118:
-            case 119: {
+            case 119:
+            case 120: {
               if (priority <= 0) {
                 opencpn_plugin_18* ppi =
                     dynamic_cast<opencpn_plugin_18*>(pic->m_pplugin);
@@ -1501,7 +1505,7 @@ bool PlugInManager::RenderAllGLCanvasOverlayPlugIns(wxGLContext* pcontext,
                                                     const ViewPort& vp,
                                                     int canvasIndex,
                                                     int priority) {
-  auto plugin_array = PluginLoader::getInstance()->GetPlugInArray();
+  auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
   for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
     PlugInContainer* pic = plugin_array->Item(i);
     if (pic->m_enabled && pic->m_init_state) {
@@ -1547,7 +1551,8 @@ bool PlugInManager::RenderAllGLCanvasOverlayPlugIns(wxGLContext* pcontext,
             break;
           }
           case 118:
-          case 119: {
+          case 119:
+          case 120: {
             if (priority <= 0) {
               opencpn_plugin_18* ppi =
                   dynamic_cast<opencpn_plugin_18*>(pic->m_pplugin);
@@ -1574,7 +1579,7 @@ bool PlugInManager::RenderAllGLCanvasOverlayPlugIns(wxGLContext* pcontext,
 }
 
 void PlugInManager::SendViewPortToRequestingPlugIns(ViewPort& vp) {
-  auto plugin_array = PluginLoader::getInstance()->GetPlugInArray();
+  auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
   for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
     PlugInContainer* pic = plugin_array->Item(i);
     if (pic->m_enabled && pic->m_init_state) {
@@ -1587,11 +1592,11 @@ void PlugInManager::SendViewPortToRequestingPlugIns(ViewPort& vp) {
 }
 
 void NotifySetupOptionsPlugin(const PlugInData* pd) {
-  PluginLoader::getInstance()->NotifySetupOptionsPlugin(pd);
+  PluginLoader::GetInstance()->NotifySetupOptionsPlugin(pd);
 }
 
 void PlugInManager::NotifySetupOptions() {
-  auto plugin_array = PluginLoader::getInstance()->GetPlugInArray();
+  auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
   for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
     PlugInContainer* pic = plugin_array->Item(i);
     NotifySetupOptionsPlugin(pic);
@@ -1603,7 +1608,7 @@ void PlugInManager::ClosePlugInPanel(const PlugInContainer* pic,
   if (pic->m_enabled && pic->m_init_state) {
     if ((pic->m_cap_flag & INSTALLS_TOOLBOX_PAGE) && pic->m_toolbox_panel) {
       pic->m_pplugin->OnCloseToolboxPanel(0, ok_apply_cancel);
-      auto loader = PluginLoader::getInstance();
+      auto loader = PluginLoader::GetInstance();
       loader->SetToolboxPanel(pic->m_common_name, false);
       loader->SetSetupOptions(pic->m_common_name, false);
     }
@@ -1611,7 +1616,7 @@ void PlugInManager::ClosePlugInPanel(const PlugInContainer* pic,
 }
 
 void PlugInManager::CloseAllPlugInPanels(int ok_apply_cancel) {
-  auto plugin_array = PluginLoader::getInstance()->GetPlugInArray();
+  auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
   for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
     PlugInContainer* pic = plugin_array->Item(i);
     if (pic) {
@@ -1679,7 +1684,7 @@ void PlugInManager::SetCanvasContextMenuItemGrey(int item, bool grey,
 }
 
 void PlugInManager::SendResizeEventToAllPlugIns(int x, int y) {
-  auto plugin_array = PluginLoader::getInstance()->GetPlugInArray();
+  auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
   for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
     PlugInContainer* pic = plugin_array->Item(i);
     if (pic->m_enabled && pic->m_init_state)
@@ -1688,7 +1693,7 @@ void PlugInManager::SendResizeEventToAllPlugIns(int x, int y) {
 }
 
 void PlugInManager::SetColorSchemeForAllPlugIns(ColorScheme cs) {
-  auto plugin_array = PluginLoader::getInstance()->GetPlugInArray();
+  auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
   for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
     PlugInContainer* pic = plugin_array->Item(i);
     if (pic->m_enabled && pic->m_init_state)
@@ -1700,7 +1705,7 @@ void PlugInManager::PrepareAllPluginContextMenus() {
   int canvasIndex = gFrame->GetCanvasIndexUnderMouse();
   if (canvasIndex < 0) return;
 
-  auto plugin_array = PluginLoader::getInstance()->GetPlugInArray();
+  auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
   for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
     PlugInContainer* pic = plugin_array->Item(i);
     if (pic->m_enabled && pic->m_init_state) {
@@ -1709,7 +1714,8 @@ void PlugInManager::PrepareAllPluginContextMenus() {
           case 116:
           case 117:
           case 118:
-          case 119: {
+          case 119:
+          case 120: {
             opencpn_plugin_116* ppi =
                 dynamic_cast<opencpn_plugin_116*>(pic->m_pplugin);
             if (ppi) ppi->PrepareContextMenu(canvasIndex);
@@ -1815,7 +1821,7 @@ void PlugInManager::SendS52ConfigToAllPlugIns(bool bReconfig) {
 }
 
 void PlugInManager::NotifyAuiPlugIns(void) {
-  auto plugin_array = PluginLoader::getInstance()->GetPlugInArray();
+  auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
   for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
     PlugInContainer* pic = plugin_array->Item(i);
     if (pic->m_enabled && pic->m_init_state &&
@@ -2030,7 +2036,7 @@ opencpn_plugin* PlugInManager::FindToolOwner(const int id) {
 wxString PlugInManager::GetToolOwnerCommonName(const int id) {
   opencpn_plugin* ppi = FindToolOwner(id);
   if (ppi) {
-    auto plugin_array = PluginLoader::getInstance()->GetPlugInArray();
+    auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
     for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
       PlugInContainer* pic = plugin_array->Item(i);
       if (pic && (pic->m_pplugin == ppi)) return pic->m_common_name;
@@ -2088,7 +2094,7 @@ wxBitmap* PlugInManager::BuildDimmedToolBitmap(wxBitmap* pbmp_normal,
 
 wxArrayString PlugInManager::GetPlugInChartClassNameArray(void) {
   wxArrayString array;
-  auto plugin_array = PluginLoader::getInstance()->GetPlugInArray();
+  auto plugin_array = PluginLoader::GetInstance()->GetPlugInArray();
   for (unsigned int i = 0; i < plugin_array->GetCount(); i++) {
     PlugInContainer* pic = plugin_array->Item(i);
     if (pic && pic->m_enabled && pic->m_init_state &&
@@ -2486,7 +2492,7 @@ void PluginListPanel::SelectByName(wxString& name) {
 /** Return sorted list of all  installed  plugins. */
 std::vector<const PlugInData*> GetInstalled() {
   std::vector<const PlugInData*> result;
-  auto loader = PluginLoader::getInstance();
+  auto loader = PluginLoader::GetInstance();
   for (size_t i = 0; i < loader->GetPlugInArray()->GetCount(); i++) {
     auto const item = loader->GetPlugInArray()->Item(i);
     if (item->m_managed_metadata.name.empty()) {
@@ -2514,7 +2520,7 @@ static bool IsPluginLoaded(const std::string& name) {
         std::find(installed.begin(), installed.end(), ocpn::tolower(name));
     return found != installed.end();
   } else {
-    auto loaded = PluginLoader::getInstance()->GetPlugInArray();
+    auto loaded = PluginLoader::GetInstance()->GetPlugInArray();
     for (size_t i = 0; i < loaded->GetCount(); i++) {
       if (loaded->Item(i)->m_common_name.ToStdString() == name) return true;
     }
@@ -2529,7 +2535,7 @@ void PluginListPanel::ReloadPluginPanels() {
     return;
   }
 
-  auto plugins = PluginLoader::getInstance()->GetPlugInArray();
+  auto plugins = PluginLoader::GetInstance()->GetPlugInArray();
   m_PluginItems.Clear();
 
   wxWindowList kids = GetChildren();
@@ -3305,12 +3311,12 @@ void PluginPanel::OnPluginPreferences(wxCommandEvent& event) {
       (m_plugin.m_cap_flag & WANTS_PREFERENCES)) {
 #ifdef __ANDROID__
     androidDisableRotation();
-    PluginLoader::getInstance()->ShowPreferencesDialog(m_plugin,
+    PluginLoader::GetInstance()->ShowPreferencesDialog(m_plugin,
                                                        GetGrandParent());
     // GrandParent will be the entire list panel, not the plugin panel.
     // Ensures better centering on small screens
 #else
-    PluginLoader::getInstance()->ShowPreferencesDialog(m_plugin, this);
+    PluginLoader::GetInstance()->ShowPreferencesDialog(m_plugin, this);
 #endif
   }
 }
@@ -3322,7 +3328,7 @@ void PluginPanel::OnPluginEnableToggle(wxCommandEvent& event) {
   if (m_plugin.m_status == PluginStatus::System) {
     // Force pluginmanager to reload all panels. Not kosher --
     // the EventVar should really only be notified from within PluginLoader.
-    PluginLoader::getInstance()->evt_pluglist_change.Notify();
+    PluginLoader::GetInstance()->evt_pluglist_change.Notify();
   }
 }
 
@@ -3354,8 +3360,8 @@ static void SetWindowFontStyle(wxWindow* window, wxFontStyle style) {
 
 void PluginPanel::SetEnabled(bool enabled) {
   if (m_is_safe_panel) return;
-  PluginLoader::getInstance()->SetEnabled(m_plugin.m_common_name, enabled);
-  PluginLoader::getInstance()->UpdatePlugIns();
+  PluginLoader::GetInstance()->SetEnabled(m_plugin.m_common_name, enabled);
+  PluginLoader::GetInstance()->UpdatePlugIns();
   NotifySetupOptionsPlugin(&m_plugin);
   if (!enabled && !m_bSelected) {
     SetWindowFontStyle(m_pName, wxFONTSTYLE_ITALIC);
@@ -4277,7 +4283,7 @@ wxString GetWritableDocumentsDir(void) {
 
 wxString GetPlugInPath(opencpn_plugin* pplugin) {
   wxString ret_val;
-  auto loader = PluginLoader::getInstance();
+  auto loader = PluginLoader::GetInstance();
   for (unsigned int i = 0; i < loader->GetPlugInArray()->GetCount(); i++) {
     PlugInContainer* pic = loader->GetPlugInArray()->Item(i);
     if (pic->m_pplugin == pplugin) {
@@ -5303,6 +5309,11 @@ _OCPN_DLStatus OCPN_downloadFile(const wxString& url,
 #else
   return OCPN_DL_FAILED;
 #endif
+}
+
+wxString toUsrDateTimeFormat_Plugin(const wxDateTime date_time,
+                                    const DateTimeFormatOptions& options) {
+  return ocpn::toUsrDateTimeFormat(date_time, options);
 }
 
 //  Non-Blocking download of single file

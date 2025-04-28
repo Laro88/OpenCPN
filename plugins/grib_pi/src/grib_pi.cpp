@@ -439,9 +439,9 @@ void grib_pi::OnToolbarToolCallback(int id) {
 #ifdef __WXOSX__
     style |= wxSTAY_ON_TOP;
 #endif
-    m_pGribCtrlBar =
-        new GRIBUICtrlBar(m_parent_window, wxID_ANY, wxEmptyString,
-                          wxDefaultPosition, wxDefaultSize, style, this);
+    m_pGribCtrlBar = new GRIBUICtrlBar(m_parent_window, wxID_ANY, wxEmptyString,
+                                       wxDefaultPosition, wxDefaultSize, style,
+                                       this, scale_factor);
     m_pGribCtrlBar->SetScaledBitmap(scale_factor);
 
     wxMenu *dummy = new wxMenu(_T("Plugin"));
@@ -450,7 +450,7 @@ void grib_pi::OnToolbarToolCallback(int id) {
                        wxEmptyString, wxITEM_NORMAL);
     /* Menu font do not work properly for MSW (wxWidgets 3.2.1)
     #ifdef __WXMSW__
-        wxFont *qFont = OCPNGetFont(_("Menu"), 0);
+        wxFont *qFont = OCPNGetFont(_("Menu"));
         table->SetFont(*qFont);
     #endif
     */
@@ -479,8 +479,7 @@ void grib_pi::OnToolbarToolCallback(int id) {
       starting = true;
     }
     // the dialog font could have been changed since grib plugin opened
-    if (m_pGribCtrlBar->GetFont() != *OCPNGetFont(_("Dialog"), 0))
-      starting = true;
+    if (m_pGribCtrlBar->GetFont() != *OCPNGetFont(_("Dialog"))) starting = true;
     if (starting) {
       m_pGRIBOverlayFactory->SetMessageFont();
       SetDialogFont(m_pGribCtrlBar);
@@ -559,11 +558,17 @@ bool grib_pi::DoRenderOverlay(wxDC &dc, PlugIn_ViewPort *vp, int canvasIndex) {
     return false;
 
   m_pGRIBOverlayFactory->RenderGribOverlay(dc, vp);
+  if (PluginGetFocusCanvas() == GetCanvasByIndex(canvasIndex)) {
+    m_pGribCtrlBar->SetViewPortWithFocus(vp);
+  }
 
   if (GetCanvasByIndex(canvasIndex) == GetCanvasUnderMouse()) {
-    m_pGribCtrlBar->SetViewPort(vp);
-    if (m_pGribCtrlBar->pReq_Dialog)
+    m_pGribCtrlBar->SetViewPortUnderMouse(vp);
+    if (m_pGribCtrlBar->pReq_Dialog &&
+        GetCanvasIndexUnderMouse() ==
+            m_pGribCtrlBar->pReq_Dialog->GetBoundingBoxCanvasIndex()) {
       m_pGribCtrlBar->pReq_Dialog->RenderZoneOverlay(dc);
+    }
   }
   if (::wxIsBusy()) ::wxEndBusyCursor();
   return true;
@@ -579,11 +584,17 @@ bool grib_pi::DoRenderGLOverlay(wxGLContext *pcontext, PlugIn_ViewPort *vp,
     return false;
 
   m_pGRIBOverlayFactory->RenderGLGribOverlay(pcontext, vp);
+  if (PluginGetFocusCanvas() == GetCanvasByIndex(canvasIndex)) {
+    m_pGribCtrlBar->SetViewPortWithFocus(vp);
+  }
 
   if (GetCanvasByIndex(canvasIndex) == GetCanvasUnderMouse()) {
-    m_pGribCtrlBar->SetViewPort(vp);
-    if (m_pGribCtrlBar->pReq_Dialog)
+    m_pGribCtrlBar->SetViewPortUnderMouse(vp);
+    if (m_pGribCtrlBar->pReq_Dialog &&
+        GetCanvasIndexUnderMouse() ==
+            m_pGribCtrlBar->pReq_Dialog->GetBoundingBoxCanvasIndex()) {
       m_pGribCtrlBar->pReq_Dialog->RenderGlZoneOverlay();
+    }
   }
 
   if (::wxIsBusy()) ::wxEndBusyCursor();
@@ -768,7 +779,7 @@ bool grib_pi::LoadConfig(void) {
   pConf->Read(_T( "DrawBarbedArrowHead" ), &m_bDrawBarbedArrowHead, 1);
   pConf->Read(_T( "ZoomToCenterAtInit"), &m_bZoomToCenterAtInit, 1);
   pConf->Read(_T( "ShowGRIBIcon" ), &m_bGRIBShowIcon, 1);
-  pConf->Read(_T( "GRIBTimeZone" ), &m_bTimeZone, 1);
+  pConf->Read(_T( "GRIBTimeZone" ), &m_bTimeZone, 2);
   pConf->Read(_T( "CopyFirstCumulativeRecord" ), &m_bCopyFirstCumRec, 1);
   pConf->Read(_T( "CopyMissingWaveRecord" ), &m_bCopyMissWaveRec, 1);
 #ifdef __WXMSW__

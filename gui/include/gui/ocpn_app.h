@@ -41,6 +41,8 @@
 #include "model/rest_server.h"
 #include "model/rest_server_wms.h"
 #include "model/usb_watch_daemon.h"
+#include "data_monitor.h"
+
 #include "WmsFrame.h"
 class Track;
 
