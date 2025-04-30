@@ -8,8 +8,8 @@
 		integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
 
-	<script src="https://cdn.jsdelivr.net/npm/ol@v10.3.1/dist/ol.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v10.3.1/ol.css">
+	<script src="https://cdn.jsdelivr.net/npm/ol@v10.5.0/dist/ol.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v10.5.0/ol.css">
 
 
 	<TITLE>WMS tester</TITLE>
@@ -21,6 +21,7 @@ TODO: It is not updated yet to reflect ideal conditions<br>
 <button onclick="pan_to_place('US Santa Catalina')">US Santa Catalina</button><br>
 <button onclick="pan_to_place('DK Soenderborg z out')">DK Soenderborg z out</button><br>
 <button onclick="pan_to_place('DK Soenderborg z in')">DK Soenderborg z in</button><br>
+<button onclick="pan_to_place('DK FRH z in')">DK FRH z in</button><br>
 <br>
 	map_opencpn_leaflet_wms
 	<div id="map_opencpn_leaflet_wms" style="width:800px;height:800px;background-color:lightcoral">
@@ -200,7 +201,7 @@ TODO: It is not updated yet to reflect ideal conditions<br>
 			console.log("pan_to_place:" + place);
 			switch(place){
 				case "US Santa Catalina":
-					perform_panto(-118.5,33.45,5);
+					perform_panto(33.45,-118.5,15);
 					break;
 				case "DK Soenderborg z out":
 					perform_panto(54.8936,9.7846, 15);
@@ -208,6 +209,11 @@ TODO: It is not updated yet to reflect ideal conditions<br>
 				case "DK Soenderborg z in":
 					perform_panto(54.8936,9.7846, 17);
 					break;
+				case "DK FRH z in":
+					perform_panto(57.4161,10.5949, 12);
+					break;
+				default:
+					console.error("Unknown place:" + place);
 			}
 
 		}
