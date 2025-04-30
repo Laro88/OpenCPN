@@ -19,8 +19,8 @@
 This is a simple demonstrator of the WMS rendering capability for OpenCPN<br>
 TODO: It is not updated yet to reflect ideal conditions<br>
 <button onclick="pan_to_place('US Santa Catalina')">US Santa Catalina</button><br>
-<button onclick="pan_to_place('DK Soenderborg')">DK Soenderborg</button><br>
-<button onclick="pan_to_place('DK Soenderborg z20')">DK Soenderborg z20</button><br>
+<button onclick="pan_to_place('DK Soenderborg z out')">DK Soenderborg z out</button><br>
+<button onclick="pan_to_place('DK Soenderborg z in')">DK Soenderborg z in</button><br>
 <br>
 	map_opencpn_leaflet_wms
 	<div id="map_opencpn_leaflet_wms" style="width:800px;height:800px;background-color:lightcoral">
@@ -29,6 +29,7 @@ TODO: It is not updated yet to reflect ideal conditions<br>
 	map_ol_10_1_0
 	<div id="map_ol_10_1_0" style="width:800px;height:800px;background-color:green"></div>
 	<br />
+	<div id="ol_cursorpos"></div>
 
 	<script>
 		console.log("script runnning")
@@ -132,10 +133,19 @@ TODO: It is not updated yet to reflect ideal conditions<br>
 					zIndex: 3
 				})
 				];
+
 				document.map_opencpnwms_ol = new Map({
 					layers: document.layers_opencpnwms_ol,
 					target: 'map_ol_10_1_0',
 					view: document.olview,
+				});
+
+				//hook up event
+				document.map_opencpnwms_ol.on('pointermove', function(evt){
+					coord = evt.coordinate;
+					var elemCursor = document.getElementById("ol_cursorpos");
+					console.log(coord);
+					elemCursor.text = ""+coord;
 				});
 			}
 			catch (e) {
@@ -184,17 +194,19 @@ TODO: It is not updated yet to reflect ideal conditions<br>
 			}
 		}
 
+
+
 		function pan_to_place(place) {
 			console.log("pan_to_place:" + place);
 			switch(place){
 				case "US Santa Catalina":
 					perform_panto(-118.5,33.45,5);
 					break;
-				case "DK Soenderborg":
+				case "DK Soenderborg z out":
 					perform_panto(54.8936,9.7846, 15);
 					break;
-				case "DK Soenderborg z20":
-					perform_panto(54.8936,9.7846, 20);
+				case "DK Soenderborg z in":
+					perform_panto(54.8936,9.7846, 17);
 					break;
 			}
 
