@@ -49,6 +49,8 @@ private:
 
   void* jpegdatabuffer;
 
+  WmsReqParams paramsPrev;
+
 protected:
   void OnWmsRequestEvent(wxWMSRequestEvent& event);
 

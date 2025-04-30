@@ -22,6 +22,7 @@
 #include <wx/mstream.h>
 #include "config.h"
 #include "model/logger.h"
+#include "model/georef.h"
 #include "model/rest_server_wms.h"
 #include "mongoose.h"
 
@@ -52,20 +53,30 @@ void WmsFrame::OnWmsRequestEvent(wxWMSRequestEvent& event) {
     // 2. color change if needed
     wxLogMessage("wxWMSRequestEvent event received");
 
+    bool changeSize = false;
+
+    // Handle changes of the requested image width & height
     if (event.p.w != lastSize_W || event.p.h != lastSize_H) {
       INFO_LOG << "Size req change  from (w,h)" << lastSize_W << ", "
                << lastSize_H << " to " << event.p.w << ", " << event.p.h;
+      changeSize = true;
+    }
 
+    int newChartW = event.p.w;  //+2;
+    int newChartH = event.p.h;  //+2;
+
+    // check actual Frame size (that we have what is needed)
+    int actualW, actualH;
+    m_pTgtFrame->GetSize(&actualW, &actualH);
+    if (actualW != newChartW + 300 || actualH != newChartH + 300) {
+      changeSize = true;
+    }
+
+    if (changeSize) {
       lastSize_W = event.p.w;
       lastSize_H = event.p.h;
-      wxLogMessage("dimension change req to w: %i h:%i", event.p.w, event.p.h);
-
-      int newChartW = event.p.w + 2;
-      // int newChartH = event.p.h + 174;
-      int newChartH = event.p.h + 204;
-
+      wxLogMessage("dimension change req to w:%i h:%i", event.p.w, event.p.h);
       m_pTgtFrame->SetSize(newChartW + 300, newChartH + 300);
-
       m_pChartCanvas->SetSize(wxSize(newChartW, newChartH));
     }
 
@@ -108,10 +119,22 @@ void WmsFrame::OnWmsRequestEvent(wxWMSRequestEvent& event) {
 
     // intermediate window text update - just to see what is requested
     std::stringstream ssImgInfo;
-    ssImgInfo << event.p.hitcount << "\n  NE" << event.p.latNE << ", "
-              << event.p.lonNE << "\nSW" << event.p.latSW << ", "
+    ssImgInfo << event.p.hitcount << "\n NE" << event.p.latNE << ", "
+              << event.p.lonNE << "\n SW" << event.p.latSW << ", "
               << event.p.lonSW << "\n"
               << event.p.color;
+
+    // size
+    double brg, dist;
+    DistanceBearingMercator(event.p.latSW, event.p.lonSW, event.p.latNE,
+                            event.p.lonNE, &brg, &dist);
+    ssImgInfo << "\nDiagdist:" << dist * 1852 << "m, diag brg:" << brg;
+
+    // move analysis
+    DistanceBearingMercator(paramsPrev.latSW, paramsPrev.lonSW, event.p.latSW,
+                            event.p.lonSW, &brg, &dist);
+    ssImgInfo << "\nrequested motion:" << dist * 1852 << "m, direction:" << brg;
+    paramsPrev = event.p;
 
     pText->SetLabelText(ssImgInfo.str());
 
