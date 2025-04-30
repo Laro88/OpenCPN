@@ -222,7 +222,7 @@ void RestServerWms::StopServer() {
 }
 
 RestServerWms::RestServerWms() {
-  INFO_LOG << "RestServerWms consctuction, call to StartServer will start the "
+  INFO_LOG << "RestServerWms construction, call to StartServer will start the "
               "rendering engine";
 }
 
