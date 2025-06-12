@@ -68,6 +68,7 @@ else
         -DCMAKE_INSTALL_PREFIX=/usr \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
         -DOCPN_CI_BUILD:BOOL=ON \
+        -DOCPN_DISTRO_BUILD=ON \
         -DOCPN_USE_BUNDLED_LIBS=OFF \
         -DOCPN_BUILD_SAMPLE=ON \
         ..

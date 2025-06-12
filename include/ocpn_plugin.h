@@ -2021,6 +2021,10 @@ public:
 class DECL_EXP opencpn_plugin_120 : public opencpn_plugin_119 {
 public:
   opencpn_plugin_120(void *pmgr);
+
+  virtual void OnContextMenuItemCallbackExt(int id, std::string obj_ident,
+                                            std::string obj_type, double lat,
+                                            double lon);
 };
 
 //------------------------------------------------------------------
@@ -2087,7 +2091,7 @@ public:
   wxString m_GUID;             //!< Globally unique identifier
   wxString m_MarkName;         //!< Display name
   wxString m_MarkDescription;  //!< Optional description
-  wxDateTime m_CreateTime;     //!< Creation timestamp
+  wxDateTime m_CreateTime;     //!< Creation timestamp in UTC.
   bool m_IsVisible;            //!< Visibility state
   wxString m_IconName;         //!< Icon identifier
 
@@ -2943,8 +2947,10 @@ extern DECL_EXP double fromDMM_PlugIn(wxString sdms);
  * Timezone settings allow displaying times in UTC, system local time, or a
  * custom zone based on the vessel's current position.
  */
-struct DateTimeFormatOptions {
-  DateTimeFormatOptions() = default;
+struct DECL_EXP DateTimeFormatOptions {
+  DateTimeFormatOptions();
+  virtual ~DateTimeFormatOptions();
+
   /**
    * The format string for date/time.
    *
@@ -2964,7 +2970,7 @@ struct DateTimeFormatOptions {
    * For example, $short_date is resolved to "12/31/2021" in the US locale and
    * "31/12/2021" in the UK locale.
    */
-  wxString format_string = "$weekday_short_date_time";
+  wxString format_string;
 
   /**
    * The timezone to use when formatting the date/time. Supported options are:
@@ -2981,13 +2987,21 @@ struct DateTimeFormatOptions {
    *   case, longitude is required.
    * - Valid timezone name: the date/time is formatted in that timezone.
    */
-  wxString time_zone = wxEmptyString;
+  wxString time_zone;
+
+  /**
+   * Whether to show timezone information in the formatted date/time string.
+   * When true, the timezone abbreviation (e.g., "EDT", "UTC", "LMT") is
+   * appended to the date/time string. When false, no timezone information
+   * is included.
+   */
+  bool show_timezone;
 
   /**
    * The longitude to use when formatting the date/time in Local Mean Time
    * (LMT). The longitude is required when the time_zone is set to "LMT".
    */
-  double longitude = NAN;
+  double longitude;
 
   int version = 1;  // For future compatibility checks
 
@@ -3034,6 +3048,17 @@ struct DateTimeFormatOptions {
    */
   DateTimeFormatOptions &SetTimezone(const wxString &tz) {
     time_zone = tz;
+    return *this;
+  }
+
+  /**
+   * Sets whether to show timezone information in the formatted output.
+   *
+   * @param show Whether to show timezone information
+   * @return Reference to this object for method chaining
+   */
+  DateTimeFormatOptions &SetShowTimezone(bool show) {
+    show_timezone = show;
     return *this;
   }
 
@@ -4911,19 +4936,18 @@ extern DECL_EXP void PlugInHandleAutopilotRoute(bool enable);
 // API 1.16
 //
 /**
- * Return the plugin data directory for a given directory name.
+ * Returns an installed plugin's data directory given a plugin name.
  *
- * On Linux, the returned data path is an existing directory ending in
- * "opencpn/plugins/<plugin_name>" where the last part is the plugin_name
- * argument. The prefix part is one of the directories listed in the
- * environment variable XDG_DATA_DIRS, by default
- * ~/.local/share:/usr/local/share:/usr/share.
+ * Platform-specific behavior:
+ * - On Linux: Searches directories from XDG_DATA_DIRS env variable for
+ *   "opencpn/plugins/<plugin_name>"
+ * - On other platforms: Checks GetSharedDataDir() + "/opencpn/plugins/" +
+ * plugin_name
  *
- * On other platforms, the returned value is GetSharedDataDir() +
- * "/opencpn/plugins/" + plugin_name (with native path separators)
- * if that path exists.
- *
- * Return "" if no existing directory is found.
+ * @param plugin_name The name of the plugin to find data for (e.g.,
+ * "weather_routing_pi")
+ * @return Path to the plugin's data directory if found, empty string if not
+ * found
  */
 extern DECL_EXP wxString GetPluginDataDir(const char *plugin_name);
 
@@ -5240,7 +5264,6 @@ public:
                      const int nRanges = 0, const double RangeDistance = 1.0,
                      const wxColor RangeColor = wxColor(255, 0, 0));
   ~PlugIn_Waypoint_Ex();
-
   /**
    * Initializes waypoint properties to default values.
    *
@@ -5281,7 +5304,7 @@ public:
   wxString m_GUID;             //!< Globally unique identifier
   wxString m_MarkName;         //!< Display name of waypoint
   wxString m_MarkDescription;  //!< Optional description text
-  wxDateTime m_CreateTime;     //!< Creation timestamp
+  wxDateTime m_CreateTime;     //!< Creation timestamp in UTC.
   bool IsVisible;              //!< Visibility state on chart
   bool IsActive;               //!< Active state (e.g. destination)
 
@@ -5305,6 +5328,101 @@ public:
 };
 
 WX_DECLARE_LIST(PlugIn_Waypoint_Ex, Plugin_WaypointExList);
+
+class DECL_EXP PlugIn_Waypoint_ExV2 {
+public:
+  PlugIn_Waypoint_ExV2();
+  PlugIn_Waypoint_ExV2(double lat, double lon, const wxString &icon_ident,
+                       const wxString &wp_name, const wxString &GUID = "",
+                       const double ScaMin = 1e9, const double ScaMax = 1e6,
+                       const bool bNameVisible = false,
+                       const int nRangeRings = 0,
+                       const double RangeDistance = 1.0,
+                       const int RangeRingSpaceUnits = 0,  // 0:nm, 1:km
+                       const wxColor RangeColor = wxColor(255, 0, 0),
+                       const double WaypointArrivalRadius = 0.0,
+                       const bool ShowWaypointRangeRings = false,
+                       const double PlannedSpeed = 0.0,
+                       const wxString TideStation = wxEmptyString);
+
+  virtual ~PlugIn_Waypoint_ExV2();
+
+  /**
+   * Gets "free-standing" status of waypoint.
+   *
+   * A waypoint is considered "free-standing" if it was:
+   * - Created by dropping a point in the GUI
+   * - Imported from a GPX file
+   * - Added via AddSingleWaypoint API
+   * (vs being part of a route)
+   *
+   * @return True if waypoint is free-standing, false if part of route
+   */
+  bool GetFSStatus();
+
+  /**
+   * Gets number of routes containing this waypoint.
+   *
+   * Returns count of how many routes include this waypoint.
+   * Used to manage waypoint deletion and route integrity.
+   *
+   * @return Number of routes waypoint belongs to (0 if free-standing)
+   */
+  int GetRouteMembershipCount();
+
+  double m_lat;                //!< Latitude in decimal degrees
+  double m_lon;                //!< Longitude in decimal degrees
+  wxString m_GUID;             //!< Globally unique identifier
+  wxString m_MarkName;         //!< Display name of waypoint
+  wxString m_MarkDescription;  //!< Optional description text
+  wxDateTime m_CreateTime;     //!< Creation timestamp in UTC.
+  bool IsVisible;              //!< Visibility state on chart
+  bool IsActive;               //!< Active state (e.g. destination)
+
+  double scamin;       //!< Minimum display scale (1:X) for waypoint visibility
+  bool b_useScamin;    //!< True to enable scale-dependent visibility
+  bool IsNameVisible;  //!< True to show waypoint name on chart
+
+  int nrange_rings;       //!< Number of range rings to display around waypoint
+  double RangeRingSpace;  //!< Distance between range rings in preferred units
+  int RangeRingSpaceUnits;  //!< Units for range ring spacing - 0:nm, 1:km
+  wxColour RangeRingColor;  //!< Color to draw range rings
+
+  wxString IconName;         //!< Name of icon to use for waypoint symbol
+  wxString IconDescription;  //!< User-friendly description of icon
+
+  /**
+   * List of hyperlinks associated with this waypoint.
+   * Can link to web pages, local files, charts, etc.
+   * Ownership is transferred to waypoint.
+   */
+  Plugin_HyperlinkList *m_HyperlinkList;
+
+  // New fields that are not in PlugIn_Waypoint_Ex
+  double scamax;  //!< Maximum display scale (1:X) for waypoint visibility
+  double m_PlannedSpeed;           //!< Planned speed for next leg (knots)
+  bool m_bShowWaypointRangeRings;  //!< True to show range rings on chart
+  double m_WaypointArrivalRadius;  //!< Arrival radius in nautical miles
+  /** Estimated departure time in UTC, or wxInvalidDateTime if not set. */
+  wxDateTime m_ETD;
+  /** Tide Station Identifier. */
+  wxString m_TideStation;
+
+protected:
+  /**
+   * Initializes waypoint properties to default values.
+   *
+   * Sets standard default values for waypoint fields:
+   * - Zero latitude/longitude
+   * - Empty name and description
+   * - Current timestamp
+   * - Visible but inactive state
+   * - Default icon and settings
+   */
+  void InitDefaults();
+};
+
+WX_DECLARE_LIST(PlugIn_Waypoint_ExV2, Plugin_WaypointExV2List);
 
 /**
  * Extended route class for managing complex route features.
@@ -5350,6 +5468,41 @@ public:
 };
 
 /**
+ * Enhanced route class for working with PlugIn_Waypoint_ExV2 waypoints.
+ *
+ * This class provides functionality similar to PlugIn_Route_Ex but works
+ * with the new PlugIn_Waypoint_ExV2 class.
+ *
+ * Key features include:
+ * - Route naming and description
+ * - Start/end point labeling
+ * - Visibility control
+ * - Active route status
+ * - Extended waypoint list management
+ * - Global unique identification
+ */
+class DECL_EXP PlugIn_Route_ExV2 {
+public:
+  PlugIn_Route_ExV2();
+  virtual ~PlugIn_Route_ExV2();
+
+  wxString m_NameString;   //!< User-visible name of the route
+  wxString m_StartString;  //!< Description of route start point
+  wxString m_EndString;    //!< Description of route end point
+  wxString m_GUID;         //!< Globally unique identifier
+  bool m_isActive;         //!< True if this is the active route
+  bool m_isVisible;        //!< True if route should be displayed
+  wxString m_Description;  //!< Optional route description/notes
+
+  /**
+   * List of waypoints making up this route in order.
+   * First point is start, last point is end.
+   * Uses PlugIn_Waypoint_ExV2 for enhanced features.
+   */
+  Plugin_WaypointExV2List *pWaypointList;
+};
+
+/**
  * Gets array of route GUIDs.
  *
  * Returns list of globally unique identifiers for all routes.
@@ -5370,8 +5523,6 @@ extern DECL_EXP wxArrayString GetTrackGUIDArray(void);
 /**
  * Gets extended waypoint data by GUID.
  *
- * Retrieves full waypoint details including extended properties.
- *
  * @param GUID Unique identifier of waypoint to get
  * @param pwaypoint Pointer to receive waypoint data
  * @return True if waypoint found and data copied
@@ -5380,9 +5531,17 @@ extern DECL_EXP bool GetSingleWaypointEx(wxString GUID,
                                          PlugIn_Waypoint_Ex *pwaypoint);
 
 /**
- * Adds a waypoint with extended properties.
+ * Gets extended waypoint data by GUID.
  *
- * Creates a new waypoint supporting advanced features like range rings.
+ * @param GUID Unique identifier of waypoint to get
+ * @param pwaypoint Pointer to receive waypoint data
+ * @return True if waypoint found and data copied
+ */
+extern DECL_EXP bool GetSingleWaypointExV2(wxString GUID,
+                                           PlugIn_Waypoint_ExV2 *pwaypoint);
+
+/**
+ * Adds a waypoint with extended properties.
  *
  * @param pwaypoint Extended waypoint data to add
  * @param b_permanent True to save persistently, false for temporary
@@ -5392,9 +5551,17 @@ extern DECL_EXP bool AddSingleWaypointEx(PlugIn_Waypoint_Ex *pwaypoint,
                                          bool b_permanent = true);
 
 /**
- * Updates an existing extended waypoint.
+ * Adds a waypoint with extended V2 properties.
  *
- * Modifies extended properties of an existing waypoint.
+ * @param pwaypoint Extended V2 waypoint data to add
+ * @param b_permanent True to save persistently, false for temporary
+ * @return True if successfully added
+ */
+extern DECL_EXP bool AddSingleWaypointExV2(PlugIn_Waypoint_ExV2 *pwaypoint,
+                                           bool b_permanent = true);
+
+/**
+ * Updates an existing extended waypoint.
  *
  * @param pwaypoint Updated waypoint data (GUID must match existing)
  * @return True if successfully updated
@@ -5402,9 +5569,15 @@ extern DECL_EXP bool AddSingleWaypointEx(PlugIn_Waypoint_Ex *pwaypoint,
 extern DECL_EXP bool UpdateSingleWaypointEx(PlugIn_Waypoint_Ex *pwaypoint);
 
 /**
- * Adds a route with extended features.
+ * Updates an existing extended V2 waypoint.
  *
- * Creates a new route supporting advanced properties like descriptions.
+ * @param pwaypoint Updated V2 waypoint data (GUID must match existing)
+ * @return True if successfully updated
+ */
+extern DECL_EXP bool UpdateSingleWaypointExV2(PlugIn_Waypoint_ExV2 *pwaypoint);
+
+/**
+ * Adds a route with extended features.
  *
  * @param proute Extended route data to add
  * @param b_permanent True to save persistently, false for temporary
@@ -5414,14 +5587,31 @@ extern DECL_EXP bool AddPlugInRouteEx(PlugIn_Route_Ex *proute,
                                       bool b_permanent = true);
 
 /**
- * Updates an existing extended route.
+ * Adds a new route with V2 waypoints.
  *
- * Modifies extended properties of an existing route.
+ * @param proute Route to add
+ * @return True if route added successfully
+ */
+extern DECL_EXP bool AddPlugInRouteExV2(PlugIn_Route_ExV2 *proute,
+                                        bool b_permanent = true);
+
+/**
+ * Updates an existing extended route.
  *
  * @param proute Updated route data (GUID must match existing)
  * @return True if successfully updated
  */
 extern DECL_EXP bool UpdatePlugInRouteEx(PlugIn_Route_Ex *proute);
+
+/**
+ * Updates existing route with V2 waypoints.
+ *
+ * Modifies an existing route with new V2 waypoint data.
+ *
+ * @param proute Updated route data (GUID must match existing)
+ * @return True if route updated successfully
+ */
+extern DECL_EXP bool UpdatePlugInRouteExV2(PlugIn_Route_ExV2 *proute);
 
 /**
  * Gets extended waypoint by GUID.
@@ -5432,7 +5622,19 @@ extern DECL_EXP bool UpdatePlugInRouteEx(PlugIn_Route_Ex *proute);
  * @return Unique pointer to waypoint data, NULL if not found
  */
 extern DECL_EXP std::unique_ptr<PlugIn_Waypoint_Ex> GetWaypointEx_Plugin(
-    const wxString &);
+    const wxString &GUID);
+
+/**
+ * Gets complete waypoint details by GUID.
+ *
+ * Returns a comprehensive waypoint object with all V2 properties.
+ *
+ * @param GUID Unique identifier of waypoint to retrieve
+ * @return Unique pointer to waypoint data, NULL if not found
+ */
+extern DECL_EXP std::unique_ptr<PlugIn_Waypoint_ExV2> GetWaypointExV2_Plugin(
+    const wxString &GUID);
+
 /**
  * Gets extended route by GUID.
  *
@@ -5442,7 +5644,18 @@ extern DECL_EXP std::unique_ptr<PlugIn_Waypoint_Ex> GetWaypointEx_Plugin(
  * @return Unique pointer to route data, NULL if not found
  */
 extern DECL_EXP std::unique_ptr<PlugIn_Route_Ex> GetRouteEx_Plugin(
-    const wxString &);
+    const wxString &GUID);
+
+/**
+ * Gets route details with V2 waypoints by GUID.
+ *
+ * Returns comprehensive route object with all V2 waypoint properties.
+ *
+ * @param GUID Unique identifier of route to retrieve
+ * @return Unique pointer to route data, NULL if not found
+ */
+extern DECL_EXP std::unique_ptr<PlugIn_Route_ExV2> GetRouteExV2_Plugin(
+    const wxString &GUID);
 
 /**
  * Gets GUID of currently active waypoint.
@@ -5500,6 +5713,12 @@ extern DECL_EXP double OCPN_GetWinDIPScaleFactor();
  * @return Vector of priority map names
  */
 extern DECL_EXP std::vector<std::string> GetPriorityMaps();
+
+/**
+ * Sets and applies new priority mapping scheme.
+ *
+ */
+extern DECL_EXP void UpdateAndApplyPriorityMaps(std::vector<std::string> map);
 
 /**
  * Gets list of active priority identifiers.
@@ -6634,5 +6853,30 @@ extern DECL_EXP std::shared_ptr<ObservableListener> GetListener(
  */
 extern DECL_EXP std::shared_ptr<PI_Notification> GetNotificationMsgPayload(
     NotificationMsgId id, ObservedEvt ev);
+
+//   * Plugin polled Comm Status support
+enum class PI_Conn_Bus : int { N0183 = 0, Signalk = 1, N2000 = 2 };
+
+enum class PI_Comm_State : int {
+  Disabled = 0,
+  NoStats = 1,
+  NoData = 2,
+  Unavailable = 3,
+  Ok = 4
+};
+
+class PI_Comm_Status {
+public:
+  PI_Comm_State state;
+  unsigned rx_count;     ///< Number of bytes received since program start.
+  unsigned tx_count;     ///< Number of bytes sent since program start.
+  unsigned error_count;  ///< Number of detected errors since program start.
+};
+
+extern DECL_EXP PI_Comm_Status GetConnState(const std::string &iface,
+                                            PI_Conn_Bus _bus);
+
+extern "C" DECL_EXP int AddCanvasContextMenuItemExt(
+    wxMenuItem *pitem, opencpn_plugin *pplugin, const std::string object_type);
 
 #endif  //_PLUGIN_H_

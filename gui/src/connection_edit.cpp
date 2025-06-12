@@ -175,11 +175,13 @@ static void LoadSerialPorts(wxComboBox* box) {
 // END_EVENT_TABLE()
 
 // Define constructors
-ConnectionEditDialog::ConnectionEditDialog() {}
+ConnectionEditDialog::ConnectionEditDialog()
+    : m_expandable_icon(this, [&](bool) { std::cout << "click!\n"; }) {}
 
 ConnectionEditDialog::ConnectionEditDialog(wxWindow* parent)
     : wxDialog(parent, wxID_ANY, _("Connection Edit"), wxDefaultPosition,
-               wxSize(560, 840)) {
+               wxSize(560, 840)),
+      m_expandable_icon(this, [&](bool) { std::cout << "click!\n"; }) {
   m_parent = parent;
 
   Init();
@@ -195,13 +197,6 @@ void ConnectionEditDialog::SetInitialSettings(void) {
 }
 
 void ConnectionEditDialog::Init() {
-  MORE = "<span foreground=\'blue\'>";
-  MORE += _("More");
-  MORE += "...</span>";
-  LESS = "<span foreground=\'blue\'>";
-  LESS += _("Less");
-  LESS += "...</span>";
-
   //  For small displays, skip the "More" text.
   // if (g_Platform->getDisplaySize().x < 80 * GetCharWidth()) MORE = "";
 
@@ -265,7 +260,6 @@ void ConnectionEditDialog::Init() {
   bSizer15 = new wxBoxSizer(wxHORIZONTAL);
 
   sbSizerConnectionProps->Add(bSizer15, 0, wxTOP | wxEXPAND, 5);
-  //  bSizer4->Add(bSizerOuterContainer, 1, wxEXPAND, 5);
 
   m_rbTypeSerial =
       new wxRadioButton(m_scrolledwin, wxID_ANY, _("Serial"), wxDefaultPosition,
@@ -601,6 +595,18 @@ void ConnectionEditDialog::Init() {
 
   // Authentication token
 
+  auto flags = wxSizerFlags().Border();
+  m_collapse_box = new wxBoxSizer(wxHORIZONTAL);
+
+  m_collapse_box->Add(
+      new wxStaticText(m_scrolledwin, wxID_ANY, _("Advanced: ")), flags);
+  m_collapse_box->Add(
+      new ExpandableIcon(m_scrolledwin,
+                         [&](bool collapsed) { OnCollapsedToggle(collapsed); }),
+      flags);
+  fgSizer5->Add(m_collapse_box, wxSizerFlags());
+  fgSizer5->Add(new wxStaticText(m_scrolledwin, wxID_ANY, ""));
+
   m_stAuthToken = new wxStaticText(m_scrolledwin, wxID_ANY, _("Auth Token"),
                                    wxDefaultPosition, wxDefaultSize, 0);
   m_stAuthToken->SetMinSize(wxSize(column1width, -1));
@@ -614,15 +620,6 @@ void ConnectionEditDialog::Init() {
   fgSizer5->Add(m_tAuthToken, 1, wxEXPAND | wxTOP, 5);
 
   m_tAuthToken->Hide();
-
-  m_cbCheckCRC = new wxCheckBox(m_scrolledwin, wxID_ANY, _("Control checksum"),
-                                wxDefaultPosition, wxDefaultSize, 0);
-  m_cbCheckCRC->SetValue(TRUE);
-  m_cbCheckCRC->SetToolTip(
-      _("If checked, only the sentences with a valid checksum are passed "
-        "through"));
-  fgSizer5->Add(m_cbCheckCRC, 0, wxALL, 2);
-  fgSizer5->AddSpacer(1);
 
   m_cbGarminHost = new wxCheckBox(m_scrolledwin, wxID_ANY,
                                   _("Use Garmin (GRMN) mode for input"),
@@ -758,11 +755,6 @@ void ConnectionEditDialog::Init() {
   bSizer12->AddSpacer(GetCharWidth() * 5);
 
   sbSizerConnectionProps->AddSpacer(20);
-
-  m_more = new wxStaticText(m_scrolledwin, wxID_ANY, "4 chars",
-                            wxDefaultPosition, wxDefaultSize, wxALIGN_LEFT);
-  m_more->SetLabelMarkup(MORE);
-  sbSizerConnectionProps->Add(m_more, wxSizerFlags().Border());
 
   ConnectControls();
 
@@ -962,7 +954,6 @@ void ConnectionEditDialog::ShowNMEACommon(bool visible) {
   m_stPrecision->Show(visible && advanced);
   m_choicePrecision->Show(visible && advanced);
   m_stPrecision->Show(visible && advanced);
-  m_cbCheckCRC->Show(visible && advanced);
   m_stAuthToken->Show(visible && advanced);
   m_tAuthToken->Show(visible && advanced);
   if (visible) {
@@ -1141,10 +1132,9 @@ void ConnectionEditDialog::ClearNMEAForm(void) {
 
 void ConnectionEditDialog::SetDSFormOptionVizStates(void) {
   bool advanced = m_advanced;
-  m_more->Show(true);
+  m_collapse_box->ShowItems(true);
   m_cbInput->Show();
   m_cbOutput->Show();
-  m_cbCheckCRC->Show(advanced);
   m_stPrecision->Show(true);
   m_choicePrecision->Show(true);
 
@@ -1174,7 +1164,6 @@ void ConnectionEditDialog::SetDSFormOptionVizStates(void) {
       ShowInFilter(false);
       m_stPrecision->Hide();
       m_choicePrecision->Hide();
-      m_cbCheckCRC->Hide();
       m_stNetDataProtocol->Hide();
       m_choiceNetDataProtocol->Hide();
     } else {
@@ -1204,9 +1193,8 @@ void ConnectionEditDialog::SetDSFormOptionVizStates(void) {
     ShowInFilter(false);
     m_stPrecision->Hide();
     m_choicePrecision->Hide();
-    m_cbCheckCRC->Hide();
     m_cbGarminHost->Hide();
-    m_more->Hide();
+    m_collapse_box->ShowItems(false);
   }
 
   if (m_rbTypeInternalBT && m_rbTypeInternalBT->GetValue()) {
@@ -1240,11 +1228,10 @@ void ConnectionEditDialog::SetDSFormOptionVizStates(void) {
 
     m_stPrecision->Hide();
     m_choicePrecision->Hide();
-    m_cbCheckCRC->Hide();
 
     m_stNetDataProtocol->Hide();
     m_choiceNetDataProtocol->Hide();
-    m_more->Hide();
+    m_collapse_box->Show(false);
   }
 
   if (m_rbTypeNet->GetValue()) {
@@ -1255,7 +1242,6 @@ void ConnectionEditDialog::SetDSFormOptionVizStates(void) {
       m_cbOutput->Hide();
       ShowInFilter(false);
       ShowOutFilter(false);
-      m_cbCheckCRC->Hide();
       m_stPrecision->Hide();
       m_choicePrecision->Hide();
       m_ButtonSKDiscover->Hide();
@@ -1265,7 +1251,7 @@ void ConnectionEditDialog::SetDSFormOptionVizStates(void) {
       m_stNetDataProtocol->Hide();
       m_choiceNetDataProtocol->Hide();
       m_cbGarminHost->Hide();
-      m_more->Hide();
+      m_collapse_box->Show(false);
 
     } else if (m_rbNetProtoSignalK->GetValue()) {
       m_cbMultiCast->Hide();
@@ -1273,7 +1259,6 @@ void ConnectionEditDialog::SetDSFormOptionVizStates(void) {
       m_cbOutput->Hide();
       ShowInFilter(false);
       ShowOutFilter(false);
-      m_cbCheckCRC->Hide();
       m_stPrecision->Hide();
       m_choicePrecision->Hide();
       m_stNetDataProtocol->Hide();
@@ -1294,13 +1279,12 @@ void ConnectionEditDialog::SetDSFormOptionVizStates(void) {
 
       if ((DataProtocol)m_choiceNetDataProtocol->GetSelection() ==
           DataProtocol::PROTO_NMEA2000) {
-        m_cbCheckCRC->Hide();
         m_stPrecision->Hide();
         m_choicePrecision->Hide();
 
         ShowInFilter(false);
         ShowOutFilter(false);
-        if (m_rbNetProtoTCP->GetValue()) m_more->Hide();
+        if (m_rbNetProtoTCP->GetValue()) m_collapse_box->ShowItems(false);
       }
       if ((DataProtocol)m_choiceNetDataProtocol->GetSelection() ==
           DataProtocol::PROTO_NMEA0183) {
@@ -1387,7 +1371,6 @@ void ConnectionEditDialog::SetConnectionParams(ConnectionParams* cp) {
 
   m_comboPort->Select(m_comboPort->FindString(cp->Port));
 
-  m_cbCheckCRC->SetValue(cp->ChecksumCheck);
   m_cbGarminHost->SetValue(cp->Garmin);
   m_cbInput->SetValue(cp->IOSelect != DS_TYPE_OUTPUT);
   m_cbOutput->SetValue(cp->IOSelect != DS_TYPE_INPUT);
@@ -1494,7 +1477,6 @@ void ConnectionEditDialog::SetDefaultConnectionParams(void) {
     m_comboPort->Select(0);
     m_comboPort->SetValue(wxEmptyString);  // These two broke it
   }
-  m_cbCheckCRC->SetValue(TRUE);
   m_cbGarminHost->SetValue(FALSE);
   m_cbInput->SetValue(TRUE);
   m_cbOutput->SetValue(FALSE);
@@ -1691,7 +1673,6 @@ void ConnectionEditDialog::OnCbOutput(wxCommandEvent& event) {
             cp->IOSelect == DS_TYPE_INPUT) {
           //  More: View the filter handler
           m_advanced = true;
-          m_more->SetLabelMarkup(m_advanced ? LESS : MORE);
           SetNMEAFormForNetProtocol();
           LayoutDialog();
 
@@ -1754,10 +1735,8 @@ void ConnectionEditDialog::OnCbMultiCast(wxCommandEvent& event) {
   LayoutDialog();
 }
 
-void ConnectionEditDialog::OnClickMore(wxMouseEvent& event) {
-  // m_cbAdvanced->SetValue(!m_cbAdvanced->IsChecked());
-  m_advanced = !m_advanced;
-  m_more->SetLabelMarkup(m_advanced ? LESS : MORE);
+void ConnectionEditDialog::OnCollapsedToggle(bool collapsed) {
+  m_advanced = !collapsed;
   if (m_rbTypeNet->GetValue())
     SetNMEAFormForNetProtocol();
   else
@@ -2051,7 +2030,7 @@ ConnectionParams* ConnectionEditDialog::UpdateConnectionParamsFromControls(
         (DataProtocol)m_choiceNetDataProtocol->GetSelection();
 
   pConnectionParams->Baudrate = wxAtoi(m_choiceBaudRate->GetStringSelection());
-  pConnectionParams->ChecksumCheck = m_cbCheckCRC->GetValue();
+  pConnectionParams->ChecksumCheck = true;
   pConnectionParams->AutoSKDiscover = m_cbCheckSKDiscover->GetValue();
   pConnectionParams->Garmin = m_cbGarminHost->GetValue();
   pConnectionParams->InputSentenceList =
@@ -2092,6 +2071,7 @@ ConnectionParams* ConnectionEditDialog::UpdateConnectionParamsFromControls(
     pConnectionParams->NetworkPort = 0;
     pConnectionParams->NetProtocol = PROTO_UNDEFINED;
     pConnectionParams->Baudrate = 0;
+    pConnectionParams->Port = "Internal GPS";
   }
 
   if (pConnectionParams->Type == INTERNAL_BT) {
@@ -2187,10 +2167,6 @@ void ConnectionEditDialog::ConnectControls() {
   m_cbMultiCast->Connect(
       wxEVT_COMMAND_CHECKBOX_CLICKED,
       wxCommandEventHandler(ConnectionEditDialog::OnCbMultiCast), NULL, this);
-  // m_cbAdvanced->Connect(
-  //    wxEVT_COMMAND_CHECKBOX_CLICKED,
-  //    wxCommandEventHandler(ConnectionEditDialog::OnCbAdvanced), NULL, this);
-  m_more->Bind(wxEVT_LEFT_DOWN, &ConnectionEditDialog::OnClickMore, this);
 
   // input/output control
   m_cbInput->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED,

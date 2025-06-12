@@ -36,6 +36,7 @@
 #include "model/comm_util.h"
 
 #include "observable.h"
+#include "expand_icon.h"
 
 class options;
 class ConnectionParamsPanel;
@@ -84,7 +85,6 @@ public:
   void OnNetProtocolSelected(wxCommandEvent &event);
   void OnBaudrateChoice(wxCommandEvent &event) { OnConnValChange(event); }
   void OnProtocolChoice(wxCommandEvent &event);
-  void OnCrcCheck(wxCommandEvent &event) { OnConnValChange(event); }
   void OnRbAcceptInput(wxCommandEvent &event);
   void OnRbIgnoreInput(wxCommandEvent &event);
   void OnBtnIStcs(wxCommandEvent &event);
@@ -98,6 +98,7 @@ public:
   void OnConnValChange(wxCommandEvent &event);
   void OnValChange(wxCommandEvent &event);
   void OnUploadFormatChange(wxCommandEvent &event);
+  void OnCollapsedToggle(bool collapsed);
   void OnShowGpsWindowCheckboxClick(wxCommandEvent &event);
   void EnableConnection(ConnectionParams *conn, bool value);
   void OnDiscoverButton(wxCommandEvent &event);
@@ -153,8 +154,7 @@ public:
   wxGridSizer *gSizerNetProps, *gSizerSerProps, *gSizerCanProps;
   wxTextCtrl *m_tNetAddress, *m_tNetPort, *m_tFilterSec, *m_tcInputStc;
   wxTextCtrl *m_tcOutputStc;
-  wxCheckBox *m_cbCheckCRC, *m_cbGarminHost, *m_cbGarminUploadHost,
-      *m_cbCheckSKDiscover;
+  wxCheckBox *m_cbGarminHost, *m_cbGarminUploadHost, *m_cbCheckSKDiscover;
   wxCheckBox *m_cbFurunoGP3X, *m_cbNMEADebug, *m_cbFilterSogCog, *m_cbInput;
   wxCheckBox *m_cbMultiCast, *m_cbAdvanced;
   wxCheckBox *m_cbOutput, *m_cbAPBMagnetic;
@@ -209,8 +209,8 @@ public:
 
   // DECLARE_EVENT_TABLE()
 protected:
-  wxString MORE, LESS;
-  wxStaticText *m_more;
+  ExpandableIcon m_expandable_icon;
+  wxSizer *m_collapse_box;
 };
 
 class SentenceListDlg : public wxDialog {

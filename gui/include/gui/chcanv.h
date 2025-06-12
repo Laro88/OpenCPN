@@ -426,6 +426,18 @@ public:
 
   bool StartTimedMovement(bool stoptimer = true);
   void DoTimedMovement();
+  /**
+   * Performs a step of smooth movement animation on the chart canvas.
+   *
+   * This function is called to update the canvas position, scale, or rotation
+   * during animated panning, zooming, or rotating operations. The amount of
+   * movement performed is determined by the elapsed time parameter @p dt, and
+   * the operation continues as long as the internal movement timer is nonzero.
+   *
+   * @param dt Elapsed time in milliseconds since the last movement step.
+   *
+   * @see StartTimedMovement(), StopMovement(), m_mustmove
+   */
   void DoMovement(long dt);
   void StopMovement();
 
@@ -532,21 +544,6 @@ public:
    *              - factor < 1: Zoom out, e.g. 0.5 makes objects half as large
    */
   void ZoomCanvasSimple(double factor);
-
-  /**
-   * Internal function that implements the actual zoom operation.
-   *
-   * This function handles the core zoom functionality including scale
-   * calculations, chart selection and viewport updates.
-   *
-   * @param factor The zoom factor to apply:
-   *              - factor > 1: Zoom in, e.g. 2.0 makes objects twice as large
-   *              - factor < 1: Zoom out, e.g. 0.5 makes objects half as large
-   *
-   * @param can_zoom_to_cursor If true, zoom operation will be centered on
-   * cursor position. If false, zoom operation centers on viewport center.
-   */
-  void DoZoomCanvas(double factor, bool can_zoom_to_cursor = true);
 
   void RotateCanvas(double dir);
   void DoRotateCanvas(double rotation);
@@ -823,8 +820,24 @@ public:
    */
   double GetDisplayScale() { return m_displayScale; }
   void ResetOwnshipOffset() { m_OSoffsetx = m_OSoffsety = 0; }
+  NotificationsList *GetNotificationsList() { return m_NotificationsList; }
 
 private:
+  /**
+   * Internal function that implements the actual zoom operation.
+   *
+   * This function handles the core zoom functionality including scale
+   * calculations, chart selection and viewport updates.
+   *
+   * @param factor The zoom factor to apply:
+   *              - factor > 1: Zoom in, e.g. 2.0 makes objects twice as large
+   *              - factor < 1: Zoom out, e.g. 0.5 makes objects half as large
+   *
+   * @param can_zoom_to_cursor If true, zoom operation will be centered on
+   * cursor position. If false, zoom operation centers on viewport center.
+   */
+  void DoZoomCanvas(double factor, bool can_zoom_to_cursor = true);
+
   int AdjustQuiltRefChart();
 
   bool UpdateS52State();
@@ -1148,6 +1161,11 @@ private:
   double m_panspeed;
   bool m_bmouse_key_mod;
   double m_zoom_factor, m_rotation_speed;
+  /**
+   * Timer/counter for smooth movement operations (panning, zooming, rotating).
+   * Represents the remaining duration (in milliseconds) for which movement
+   * should continue. Used to control animation steps.
+   */
   int m_mustmove;
 
   wxDateTime m_last_movement_time;

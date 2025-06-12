@@ -193,10 +193,12 @@ bool CreateOutputConnection(const wxString& com_name,
                       << " ...Could not be opened for writing";
         }
       }
+    } else {
+      driver =
+          FindDriver(drivers, comx.ToStdString(), NavAddr::Bus::N0183).get();
     }
 #endif
-  } else
-    driver = FindDriver(drivers, com_name.ToStdString()).get();
+  }
 
   if (com_name.Find("Bluetooth") != wxNOT_FOUND) {
     wxString comm_addr = com_name.AfterFirst(';');
@@ -209,6 +211,9 @@ bool CreateOutputConnection(const wxString& com_name,
   } else if (com_name.Lower().StartsWith("udp") ||
              com_name.Lower().StartsWith("tcp")) {
     CommDriverN0183Net* drv_net_n0183(nullptr);
+    driver =
+        FindDriver(drivers, com_name.ToStdString(), NavAddr::Bus::N0183).get();
+
     if (!driver) {
       NetworkProtocol protocol = UDP;
       if (com_name.Lower().StartsWith("tcp")) protocol = TCP;
@@ -224,7 +229,7 @@ bool CreateOutputConnection(const wxString& com_name,
       cp.NetProtocol = protocol;
       cp.NetworkAddress = address;
       cp.NetworkPort = port;
-      cp.IOSelect = DS_TYPE_INPUT_OUTPUT;
+      cp.IOSelect = DS_TYPE_OUTPUT;  // DS_TYPE_INPUT_OUTPUT;
 
       MakeCommDriver(&cp);
       auto& me =
@@ -368,7 +373,6 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
                          N0183DlgCtx dlg_ctx) {
   int ret_val = 0;
 
-  std::unique_ptr<AbstractCommDriver> target_driver;
   ConnectionParams params_save;
   bool b_restoreStream = false;
   bool btempStream = false;
@@ -377,6 +381,14 @@ int SendRouteToGPS_N0183(Route* pr, const wxString& com_name,
 
   PrepareOutputChannel(com_name, dlg_ctx, params_save, b_restoreStream,
                        btempStream);
+
+  std::string target_iface =
+      com_name.AfterFirst(':').ToStdString();  // For serial ports
+  if (com_name.Lower().StartsWith("udp") || com_name.Lower().StartsWith("tcp"))
+    target_iface = com_name.ToStdString();  // for network
+
+  auto& target_driver =
+      FindDriver(registry.GetDrivers(), target_iface, NavAddr::Bus::N0183);
 
   auto drv_n0183 = dynamic_cast<CommDriverN0183*>(target_driver.get());
   if (!drv_n0183) {
@@ -870,7 +882,6 @@ int SendWaypointToGPS_N0183(RoutePoint* prp, const wxString& com_name,
                             Multiplexer& multiplexer, N0183DlgCtx dlg_ctx) {
   int ret_val = 0;
 
-  std::unique_ptr<AbstractCommDriver> target_driver;
   ConnectionParams params_save;
   bool b_restoreStream = false;
   bool btempStream = false;
@@ -879,6 +890,10 @@ int SendWaypointToGPS_N0183(RoutePoint* prp, const wxString& com_name,
 
   PrepareOutputChannel(com_name, dlg_ctx, params_save, b_restoreStream,
                        btempStream);
+
+  auto& target_driver =
+      FindDriver(registry.GetDrivers(), com_name.AfterFirst(':').ToStdString(),
+                 NavAddr::Bus::N0183);
 
 #ifdef USE_GARMINHOST
 #ifdef __WXMSW__

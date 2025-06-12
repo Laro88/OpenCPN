@@ -1228,38 +1228,37 @@ bool CommBridge::SaveConfig(void) {
 }
 
 std::string CommBridge::GetPriorityKey(std::shared_ptr<const NavMsg> msg) {
-  std::string source = msg->source->to_string();
-  std::string listener_key = msg->key();
+  std::string key;
 
   std::string this_identifier;
   std::string this_address("0");
   if (msg->bus == NavAddr::Bus::N0183) {
     auto msg_0183 = std::dynamic_pointer_cast<const Nmea0183Msg>(msg);
     if (msg_0183) {
+      std::string source = msg->source->to_string();
       this_identifier = msg_0183->talker;
       this_identifier += msg_0183->type;
+      key = source + ":" + this_address + ";" + this_identifier;
     }
   } else if (msg->bus == NavAddr::Bus::N2000) {
     auto msg_n2k = std::dynamic_pointer_cast<const Nmea2000Msg>(msg);
     if (msg_n2k) {
       this_identifier = msg_n2k->PGN.to_string();
       unsigned char n_source = msg_n2k->payload.at(7);
-      char ss[4];
-      sprintf(ss, "%d", n_source);
-      this_address = std::string(ss);
+      wxString km = wxString::Format("N2k device address: %d", n_source);
+      key = km.ToStdString() + " ; " + "PGN: " + this_identifier;
     }
   } else if (msg->bus == NavAddr::Bus::Signalk) {
     auto msg_sk = std::dynamic_pointer_cast<const SignalkMsg>(msg);
     if (msg_sk) {
       auto addr_sk =
           std::static_pointer_cast<const NavAddrSignalK>(msg->source);
-      source = addr_sk->to_string();
-      this_identifier = "signalK";
-      this_address = msg->source->iface;
+      std::string source = addr_sk->to_string();
+      key = source;  // Simplified, parsing sK for more info is expensive
     }
   }
 
-  return source + ":" + this_address + ";" + this_identifier;
+  return key;
 }
 
 bool CommBridge::EvalPriority(
@@ -1441,7 +1440,7 @@ bool CommBridge::EvalPriority(
       m_last_position_priority = this_priority;
 
       wxString msg;
-      msg.Printf("GNSS position fix priority shift: %s\n %s \n -> %s",
+      msg.Printf(_("GNSS position fix priority shift:") + " %s\n %s \n -> %s",
                  this_identifier.c_str(), m_last_position_source.c_str(),
                  source.c_str());
       auto& noteman = NotificationManager::GetInstance();

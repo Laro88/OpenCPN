@@ -457,6 +457,18 @@ if (QT_ANDROID)
     add_compile_options("-O0")
   endif ()
   set(CMAKE_SHARED_LINKER_FLAGS "-Wl,-soname,libgorp.so -Wl,--build-id")
+
+  include(FetchContent)
+  FetchContent_Declare(
+          lunasvg
+          GIT_REPOSITORY https://github.com/sammycage/lunasvg.git
+          GIT_TAG master  # Specify the desired branch or tag
+  )
+  set(LUNASVG_BUILD_EXAMPLES OFF CACHE INTERNAL "Enable lunasvg samples")
+  set(PLUTOVG_BUILD_EXAMPLES OFF CACHE INTERNAL "Enable plutovg samples")
+
+  FetchContent_MakeAvailable(lunasvg)
+  include_directories("${CMAKE_CURRENT_BINARY_DIR}/_deps/lunasvg-src/include")
 endif ()
 
 if (ARCH STREQUAL armhf)
@@ -1066,10 +1078,12 @@ elseif (APPLE)
   )
 elseif (QT_ANDROID)
   target_include_directories(_opencpn INTERFACE ${CMAKE_SOURCE_DIR}/android)
+  target_link_libraries(${PACKAGE_NAME} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/_deps/lunasvg-build/liblunasvg.a")
+  target_link_libraries(${PACKAGE_NAME} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/_deps/lunasvg-build/plutovg/libplutovg.a")
 endif ()
 add_library(ocpn::opencpn ALIAS _opencpn)
 
-if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang|GNU")
+if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang|GNU" AND NOT OCPN_PEDANTIC)
   target_compile_options(
     ${PACKAGE_NAME} PUBLIC -Werror -Wno-unknown-warning-option
   )
@@ -1264,9 +1278,6 @@ if (OCPN_USE_CRASHREPORT)
     message(STATUS "Using Linux crash reporting")
   endif ()
 endif ()
-
-add_subdirectory("libs/sqlite")
-target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::sqlite)
 
 add_subdirectory("libs/SQLiteCpp")
 target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::sqlite_cpp)
@@ -1957,6 +1968,7 @@ add_subdirectory(libs/picosha2)
 add_subdirectory(libs/pugixml)
 add_subdirectory(libs/rapidjson)
 add_subdirectory(libs/s52plib)
+add_subdirectory(libs/sqlite)
 
 if (QT_ANDROID)
   set(SOUND_WX_INCLUDE_DIR "${ANDROID_WX_INCLUDES}" CACHE STRING "")
@@ -2749,6 +2761,7 @@ add_subdirectory(model)
 target_link_libraries(${PACKAGE_NAME} PUBLIC ocpn::model-src ocpn::model)
 
 if (OCPN_BUILD_TEST)
+
   add_subdirectory(libs/gtest)
   add_subdirectory(test)
   add_custom_target(
