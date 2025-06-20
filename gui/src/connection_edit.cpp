@@ -177,15 +177,16 @@ static void LoadSerialPorts(wxComboBox* box) {
 // Define constructors
 ConnectionEditDialog::ConnectionEditDialog() {}
 
-ConnectionEditDialog::ConnectionEditDialog(wxWindow* parent)
-    : wxDialog(parent, wxID_ANY, _("Connection Edit"), wxDefaultPosition,
-               wxSize(560, 840)) {
+ConnectionEditDialog::ConnectionEditDialog(
+    wxWindow* parent,
+    std::function<void(ConnectionParams* p, bool editing, bool ok_cancel)>
+        _on_edit_click)
+    : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(-1, -1), 0,
+              "conn_edit"),
+      m_on_edit_click(_on_edit_click) {
   m_parent = parent;
 
   Init();
-  // Layout();
-  // Fit();
-  // Show();
 }
 
 ConnectionEditDialog::~ConnectionEditDialog() {}
@@ -194,16 +195,50 @@ void ConnectionEditDialog::SetInitialSettings(void) {
   LoadSerialPorts(m_comboPort);
 }
 
-void ConnectionEditDialog::Init() {
-  MORE = "<span foreground=\'blue\'>";
-  MORE += _("More");
-  MORE += "...</span>";
-  LESS = "<span foreground=\'blue\'>";
-  LESS += _("Less");
-  LESS += "...</span>";
+void ConnectionEditDialog::AddOKCancelButtons() {
+#ifndef ANDROID
+  if (!m_btnSizer) {
+    m_btnSizer = new wxStdDialogButtonSizer();
+    m_btnOK = new wxButton(this, wxID_OK);
+    m_btnCancel = new wxButton(this, wxID_CANCEL, _("Cancel"));
+    m_btnSizer->AddButton(m_btnOK);
+    m_btnSizer->AddButton(m_btnCancel);
+    m_btnSizer->Realize();
+    GetSizer()->Add(m_btnSizer, 0, wxALL | wxEXPAND, 5);
+    m_btnSizer->Show(true);
+  }
+#else
+  if (!m_btnSizerBox) {
+    m_btnSizerBox = new wxBoxSizer(wxHORIZONTAL);
+    m_btnOK = new wxButton(this, wxID_OK);
+    m_btnCancel = new wxButton(this, wxID_CANCEL, _("Cancel"));
+    m_btnSizerBox->AddSpacer(wxWindow::GetCharWidth());
+    m_btnSizerBox->Add(m_btnOK, 0, wxALL, 5);
+    m_btnSizerBox->Add(m_btnCancel, 0, wxALL, 5);
+    GetSizer()->Add(m_btnSizerBox, 0, wxALL | wxEXPAND, 5);
+  }
+#endif
 
-  //  For small displays, skip the "More" text.
-  // if (g_Platform->getDisplaySize().x < 80 * GetCharWidth()) MORE = "";
+  m_btnOK->Bind(wxEVT_COMMAND_BUTTON_CLICKED,
+                [&](wxCommandEvent& ev) { OnOKClick(); });
+  m_btnCancel->Bind(wxEVT_COMMAND_BUTTON_CLICKED,
+                    [&](wxCommandEvent& ev) { OnCancelClick(); });
+}
+
+void ConnectionEditDialog::OnOKClick() {
+  m_on_edit_click(m_cp_original, new_mode, true);
+}
+
+void ConnectionEditDialog::OnCancelClick() {
+  m_on_edit_click(nullptr, false, false);
+}
+
+void ConnectionEditDialog::Init() {
+  wxFont* qFont = GetOCPNScaledFont(_("Dialog"));
+  SetFont(*qFont);
+
+  m_btnSizer = nullptr;
+  m_btnSizerBox = nullptr;
 
   // Setup some inital values
   m_buttonScanBT = 0;
@@ -217,28 +252,33 @@ void ConnectionEditDialog::Init() {
   // Create the UI
 
   wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
+  SetSizer(mainSizer);
 
+#if 0
   wxBoxSizer* boxSizer02 = new wxBoxSizer(wxVERTICAL);
   mainSizer->Add(boxSizer02, 1, wxEXPAND | wxALL, 2);
+#endif
 
+#if 0
   m_scrolledwin =
       new wxScrolledWindow(this, wxID_ANY, wxDefaultPosition, wxSize(-1, -1),
-                           wxTAB_TRAVERSAL | wxVSCROLL);
-  m_scrolledwin->SetScrollRate(0, 5);
+                           wxVSCROLL | wxHSCROLL);
+  m_scrolledwin->ShowScrollbars(wxSHOW_SB_NEVER, wxSHOW_SB_NEVER);
+  m_scrolledwin->SetScrollRate(1, 1);
+#ifdef ANDROID
+  //m_scrolledwin->SetFont(*qFont);
+  //m_scrolledwin->GetHandle()->setStyleSheet(getWideScrollBarsStyleSheet());
+  QString qtStyleSheetFont = "font: bold;background-color: red;font-size: 48px;";
+  //GetHandle()->setStyleSheet(qtStyleSheetFont);
+  //GetHandle()->setStyleSheet(getWideScrollBarsStyleSheet());
+
+#endif
   boxSizer02->Add(m_scrolledwin, 1, wxALL | wxEXPAND, 3);
 
   auto boxSizerSWin = new wxBoxSizer(wxVERTICAL);
   m_scrolledwin->SetSizer(boxSizerSWin);
-
-  wxStdDialogButtonSizer* btnSizer = new wxStdDialogButtonSizer();
-  wxButton* btnOK = new wxButton(this, wxID_OK);
-  wxButton* btnCancel = new wxButton(this, wxID_CANCEL, _("Cancel"));
-  btnSizer->AddButton(btnOK);
-  btnSizer->AddButton(btnCancel);
-  btnSizer->Realize();
-  mainSizer->Add(btnSizer, 0, wxALL | wxEXPAND, 5);
-
-  SetSizer(mainSizer);
+  boxSizerSWin->SetSizeHints(m_scrolledwin);
+#endif
 
   int group_item_spacing = 2;
 
@@ -246,6 +286,7 @@ void ConnectionEditDialog::Init() {
   double font_size = dFont->GetPointSize() * 17 / 16;
   wxFont* bFont = wxTheFontList->FindOrCreateFont(
       font_size, dFont->GetFamily(), dFont->GetStyle(), wxFONTWEIGHT_BOLD);
+
   //
   //   m_stEditCon = new wxStaticText(m_pNMEAForm, wxID_ANY, _("Edit Selected
   //   Connection")); m_stEditCon->SetFont(*bFont); bSizer19->Add(m_stEditCon,
@@ -253,31 +294,28 @@ void ConnectionEditDialog::Init() {
   //
 
   //  Connections Properties
-  m_sbConnEdit =
-      new wxStaticBox(m_scrolledwin, wxID_ANY, _("Edit Selected Connection"));
+  m_sbConnEdit = new wxStaticBox(this, wxID_ANY, _("Edit Selected Connection"));
   m_sbConnEdit->SetFont(*bFont);
 
   sbSizerConnectionProps = new wxStaticBoxSizer(m_sbConnEdit, wxVERTICAL);
-  m_scrolledwin->GetSizer()->Add(sbSizerConnectionProps, 1, wxALL | wxEXPAND,
-                                 5);
+  GetSizer()->Add(sbSizerConnectionProps, 1, wxALL | wxEXPAND, 5);
 
   wxBoxSizer* bSizer15;
   bSizer15 = new wxBoxSizer(wxHORIZONTAL);
 
   sbSizerConnectionProps->Add(bSizer15, 0, wxTOP | wxEXPAND, 5);
-  //  bSizer4->Add(bSizerOuterContainer, 1, wxEXPAND, 5);
 
   m_rbTypeSerial =
-      new wxRadioButton(m_scrolledwin, wxID_ANY, _("Serial"), wxDefaultPosition,
+      new wxRadioButton(this, wxID_ANY, _("Serial"), wxDefaultPosition,
                         wxDefaultSize, wxRB_GROUP);
   m_rbTypeSerial->SetValue(TRUE);
   bSizer15->Add(m_rbTypeSerial, 0, wxALL, 5);
 
-  m_rbTypeNet = new wxRadioButton(m_scrolledwin, wxID_ANY, _("Network"),
+  m_rbTypeNet = new wxRadioButton(this, wxID_ANY, _("Network"),
                                   wxDefaultPosition, wxDefaultSize, 0);
   bSizer15->Add(m_rbTypeNet, 0, wxALL, 5);
 
-  m_rbTypeCAN = new wxRadioButton(m_scrolledwin, wxID_ANY, "socketCAN",
+  m_rbTypeCAN = new wxRadioButton(this, wxID_ANY, "socketCAN",
                                   wxDefaultPosition, wxDefaultSize, 0);
 #if defined(__linux__) && !defined(__ANDROID__) && !defined(__WXOSX__)
   bSizer15->Add(m_rbTypeCAN, 0, wxALL, 5);
@@ -289,9 +327,8 @@ void ConnectionEditDialog::Init() {
   sbSizerConnectionProps->Add(bSizer15a, 0, wxEXPAND, 5);
 
   if (OCPNPlatform::hasInternalGPS()) {
-    m_rbTypeInternalGPS =
-        new wxRadioButton(m_scrolledwin, wxID_ANY, _("Built-in GPS"),
-                          wxDefaultPosition, wxDefaultSize, 0);
+    m_rbTypeInternalGPS = new wxRadioButton(
+        this, wxID_ANY, _("Built-in GPS"), wxDefaultPosition, wxDefaultSize, 0);
     bSizer15a->Add(m_rbTypeInternalGPS, 0, wxALL, 5);
   } else
     m_rbTypeInternalGPS = NULL;
@@ -299,11 +336,11 @@ void ConnectionEditDialog::Init() {
   // has built-in Bluetooth
   if (OCPNPlatform::hasInternalBT()) {
     m_rbTypeInternalBT =
-        new wxRadioButton(m_scrolledwin, wxID_ANY, _("Built-in Bluetooth SPP"),
+        new wxRadioButton(this, wxID_ANY, _("Built-in Bluetooth SPP"),
                           wxDefaultPosition, wxDefaultSize, 0);
     bSizer15a->Add(m_rbTypeInternalBT, 0, wxALL, 5);
 
-    m_buttonScanBT = new wxButton(m_scrolledwin, wxID_ANY, _("BT Scan"),
+    m_buttonScanBT = new wxButton(this, wxID_ANY, _("BT Scan"),
                                   wxDefaultPosition, wxDefaultSize);
     m_buttonScanBT->Hide();
 
@@ -312,9 +349,8 @@ void ConnectionEditDialog::Init() {
 
     sbSizerConnectionProps->Add(m_buttonScanBT, 0, wxALL, 5);
 
-    m_stBTPairs =
-        new wxStaticText(m_scrolledwin, wxID_ANY, _("Bluetooth Data Sources"),
-                         wxDefaultPosition, wxDefaultSize, 0);
+    m_stBTPairs = new wxStaticText(this, wxID_ANY, _("Bluetooth Data Sources"),
+                                   wxDefaultPosition, wxDefaultSize, 0);
     m_stBTPairs->Wrap(-1);
     m_stBTPairs->Hide();
     sbSizerConnectionProps->Add(m_stBTPairs, 0, wxALL, 5);
@@ -322,9 +358,9 @@ void ConnectionEditDialog::Init() {
     wxArrayString mt;
     mt.Add("unscanned");
 
-    int ref_size = m_scrolledwin->GetCharWidth();
+    int ref_size = this->GetCharWidth();
     m_choiceBTDataSources =
-        new wxChoice(m_scrolledwin, wxID_ANY, wxDefaultPosition,
+        new wxChoice(this, wxID_ANY, wxDefaultPosition,
                      wxSize(40 * ref_size, 2 * ref_size), mt);
     // m_choiceBTDataSources->Bind(wxEVT_MOUSEWHEEL,
     // &ConnectionEditDialog::OnWheelChoice, this);
@@ -339,9 +375,8 @@ void ConnectionEditDialog::Init() {
 
   sbSizerConnectionProps->Add(gSizerNetProps, 0, wxEXPAND, 5);
 
-  m_stNetProto =
-      new wxStaticText(m_scrolledwin, wxID_ANY, _("Network Protocol"),
-                       wxDefaultPosition, wxDefaultSize, 0);
+  m_stNetProto = new wxStaticText(this, wxID_ANY, _("Network Protocol"),
+                                  wxDefaultPosition, wxDefaultSize, 0);
   m_stNetProto->Wrap(-1);
   gSizerNetProps->Add(m_stNetProto, 0, wxALL, 5);
 
@@ -351,15 +386,14 @@ void ConnectionEditDialog::Init() {
   gSizerNetProps->AddSpacer(1);
   gSizerNetProps->AddSpacer(1);
 
-  m_rbNetProtoTCP =
-      new wxRadioButton(m_scrolledwin, wxID_ANY, _("TCP"), wxDefaultPosition,
-                        wxDefaultSize, wxRB_GROUP);
+  m_rbNetProtoTCP = new wxRadioButton(
+      this, wxID_ANY, _("TCP"), wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
   m_rbNetProtoTCP->Enable(TRUE);
   m_rbNetProtoTCP->SetValue(TRUE);
 
   bSizer16->Add(m_rbNetProtoTCP, 0, wxALL, 5);
 
-  m_rbNetProtoUDP = new wxRadioButton(m_scrolledwin, wxID_ANY, _("UDP"),
+  m_rbNetProtoUDP = new wxRadioButton(this, wxID_ANY, _("UDP"),
                                       wxDefaultPosition, wxDefaultSize, 0);
   m_rbNetProtoUDP->Enable(TRUE);
 
@@ -373,32 +407,29 @@ void ConnectionEditDialog::Init() {
     gSizerNetProps->Add(bSizer16a, 1, wxEXPAND, 5);
     gSizerNetProps->AddSpacer(1);
     gSizerNetProps->AddSpacer(1);
-    m_rbNetProtoGPSD = new wxRadioButton(m_scrolledwin, wxID_ANY, _("GPSD"),
+    m_rbNetProtoGPSD = new wxRadioButton(this, wxID_ANY, _("GPSD"),
                                          wxDefaultPosition, wxDefaultSize, 0);
     m_rbNetProtoGPSD->Enable(TRUE);
     bSizer16a->Add(m_rbNetProtoGPSD, 0, wxALL, 5);
 
-    m_rbNetProtoSignalK =
-        new wxRadioButton(m_scrolledwin, wxID_ANY, _("Signal K"),
-                          wxDefaultPosition, wxDefaultSize, 0);
+    m_rbNetProtoSignalK = new wxRadioButton(
+        this, wxID_ANY, _("Signal K"), wxDefaultPosition, wxDefaultSize, 0);
     m_rbNetProtoSignalK->Enable(TRUE);
     bSizer16a->Add(m_rbNetProtoSignalK, 0, wxALL, 5);
   } else {
-    m_rbNetProtoGPSD = new wxRadioButton(m_scrolledwin, wxID_ANY, _("GPSD"),
+    m_rbNetProtoGPSD = new wxRadioButton(this, wxID_ANY, _("GPSD"),
                                          wxDefaultPosition, wxDefaultSize, 0);
     m_rbNetProtoGPSD->Enable(TRUE);
     bSizer16->Add(m_rbNetProtoGPSD, 0, wxALL, 5);
 
-    m_rbNetProtoSignalK =
-        new wxRadioButton(m_scrolledwin, wxID_ANY, _("Signal K"),
-                          wxDefaultPosition, wxDefaultSize, 0);
+    m_rbNetProtoSignalK = new wxRadioButton(
+        this, wxID_ANY, _("Signal K"), wxDefaultPosition, wxDefaultSize, 0);
     m_rbNetProtoSignalK->Enable(TRUE);
     bSizer16->Add(m_rbNetProtoSignalK, 0, wxALL, 5);
   }
 
-  m_stNetDataProtocol =
-      new wxStaticText(m_scrolledwin, wxID_ANY, _("Data Protocol"),
-                       wxDefaultPosition, wxDefaultSize, 0);
+  m_stNetDataProtocol = new wxStaticText(this, wxID_ANY, _("Data Protocol"),
+                                         wxDefaultPosition, wxDefaultSize, 0);
   m_stNetDataProtocol->Wrap(-1);
 
   gSizerNetProps->Add(m_stNetDataProtocol, 0, wxALL, 5);
@@ -407,7 +438,7 @@ void ConnectionEditDialog::Init() {
   int m_choiceNetProtocolNChoices =
       sizeof(m_choiceNetProtocolChoices) / sizeof(wxString);
   m_choiceNetDataProtocol =
-      new wxChoice(m_scrolledwin, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+      new wxChoice(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
                    m_choiceNetProtocolNChoices, m_choiceNetProtocolChoices, 0);
   // m_choiceNetDataProtocol->Bind(wxEVT_MOUSEWHEEL,
   // &ConnectionEditDialog::OnWheelChoice, this);
@@ -418,16 +449,16 @@ void ConnectionEditDialog::Init() {
   gSizerNetProps->AddSpacer(1);
   gSizerNetProps->AddSpacer(1);
 
-  m_stNetAddr = new wxStaticText(m_scrolledwin, wxID_ANY, _("Address"),
+  m_stNetAddr = new wxStaticText(this, wxID_ANY, _("Address"),
                                  wxDefaultPosition, wxDefaultSize, 0);
   m_stNetAddr->Wrap(-1);
   int column1width = 16 * m_stNetProto->GetCharWidth();
   m_stNetAddr->SetMinSize(wxSize(column1width, -1));
   gSizerNetProps->Add(m_stNetAddr, 0, wxALL, 5);
 
-  m_tNetAddress = new wxTextCtrl(m_scrolledwin, wxID_ANY, wxEmptyString,
+  m_tNetAddress = new wxTextCtrl(this, wxID_ANY, wxEmptyString,
                                  wxDefaultPosition, wxDefaultSize, 0);
-  int column2width = 40 * m_scrolledwin->GetCharWidth();
+  int column2width = 40 * this->GetCharWidth();
   m_tNetAddress->SetMaxSize(wxSize(column2width, -1));
   m_tNetAddress->SetMinSize(wxSize(column2width, -1));
 
@@ -435,13 +466,13 @@ void ConnectionEditDialog::Init() {
   gSizerNetProps->AddSpacer(1);
   gSizerNetProps->AddSpacer(1);
 
-  m_stNetPort = new wxStaticText(m_scrolledwin, wxID_ANY, _("DataPort"),
+  m_stNetPort = new wxStaticText(this, wxID_ANY, _("DataPort"),
                                  wxDefaultPosition, wxDefaultSize, 0);
   m_stNetPort->Wrap(-1);
   gSizerNetProps->Add(m_stNetPort, 0, wxALL, 5);
 
-  m_tNetPort = new wxTextCtrl(m_scrolledwin, wxID_ANY, wxEmptyString,
-                              wxDefaultPosition, wxDefaultSize, 0);
+  m_tNetPort = new wxTextCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition,
+                              wxDefaultSize, 0);
   gSizerNetProps->Add(m_tNetPort, 1, wxEXPAND | wxTOP, 5);
   gSizerNetProps->AddSpacer(1);
   gSizerNetProps->AddSpacer(1);
@@ -453,16 +484,15 @@ void ConnectionEditDialog::Init() {
   // fgSizer1C->SetFlexibleDirection(wxBOTH);
   // fgSizer1C->SetNonFlexibleGrowMode(wxFLEX_GROWMODE_SPECIFIED);
 
-  m_stCANSource =
-      new wxStaticText(m_scrolledwin, wxID_ANY, _("socketCAN Source"),
-                       wxDefaultPosition, wxDefaultSize, 0);
+  m_stCANSource = new wxStaticText(this, wxID_ANY, _("socketCAN Source"),
+                                   wxDefaultPosition, wxDefaultSize, 0);
   m_stCANSource->Wrap(-1);
   m_stCANSource->SetMinSize(wxSize(column1width, -1));
   fgSizer1C->Add(m_stCANSource, 0, wxALL, 5);
 
   wxArrayString choices = GetAvailableSocketCANInterfaces();
-  m_choiceCANSource = new wxChoice(m_scrolledwin, wxID_ANY, wxDefaultPosition,
-                                   wxDefaultSize, choices);
+  m_choiceCANSource =
+      new wxChoice(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, choices);
 
   m_choiceCANSource->SetSelection(0);
   m_choiceCANSource->Enable(TRUE);
@@ -483,22 +513,22 @@ void ConnectionEditDialog::Init() {
   fgSizer1->SetNonFlexibleGrowMode(wxFLEX_GROWMODE_SPECIFIED);
 
   m_stSerPort =
-      new wxStaticText(m_scrolledwin, wxID_ANY, _("Data port"),
-                       wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
+      new wxStaticText(this, wxID_ANY, _("Data port"), wxDefaultPosition,
+                       wxDefaultSize, wxST_ELLIPSIZE_END);
   m_stSerPort->SetMinSize(wxSize(column1width, -1));
   m_stSerPort->Wrap(-1);
 
   fgSizer1->Add(m_stSerPort, 0, wxALL, 5);
 
-  m_comboPort = new wxComboBox(m_scrolledwin, wxID_ANY, wxEmptyString,
-                               wxDefaultPosition, wxDefaultSize, 0, NULL, 0);
+  m_comboPort = new wxComboBox(this, wxID_ANY, wxEmptyString, wxDefaultPosition,
+                               wxDefaultSize, 0, NULL, 0);
 
   m_comboPort->SetMaxSize(wxSize(column2width, -1));
   m_comboPort->SetMinSize(wxSize(column2width, -1));
 
   fgSizer1->Add(m_comboPort, 0, wxEXPAND | wxTOP, 5);
 
-  m_stSerBaudrate = new wxStaticText(m_scrolledwin, wxID_ANY, _("Baudrate"),
+  m_stSerBaudrate = new wxStaticText(this, wxID_ANY, _("Baudrate"),
                                      wxDefaultPosition, wxDefaultSize, 0);
   m_stSerBaudrate->Wrap(-1);
   fgSizer1->AddSpacer(1);
@@ -512,7 +542,7 @@ void ConnectionEditDialog::Init() {
   int m_choiceBaudRateNChoices =
       sizeof(m_choiceBaudRateChoices) / sizeof(wxString);
   m_choiceBaudRate =
-      new wxChoice(m_scrolledwin, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+      new wxChoice(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
                    m_choiceBaudRateNChoices, m_choiceBaudRateChoices, 0);
   // m_choiceBaudRate->Bind(wxEVT_MOUSEWHEEL,
   // &ConnectionEditDialog::OnWheelChoice, this);
@@ -523,7 +553,7 @@ void ConnectionEditDialog::Init() {
   fgSizer1->AddSpacer(1);
   fgSizer1->AddSpacer(1);
 
-  m_stSerProtocol = new wxStaticText(m_scrolledwin, wxID_ANY, _("Protocol"),
+  m_stSerProtocol = new wxStaticText(this, wxID_ANY, _("Protocol"),
                                      wxDefaultPosition, wxDefaultSize, 0);
   m_stSerProtocol->Wrap(-1);
   fgSizer1->Add(m_stSerProtocol, 0, wxALL, 5);
@@ -532,7 +562,7 @@ void ConnectionEditDialog::Init() {
   int m_choiceSerialProtocolNChoices =
       sizeof(m_choiceSerialProtocolChoices) / sizeof(wxString);
   m_choiceSerialProtocol = new wxChoice(
-      m_scrolledwin, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+      this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
       m_choiceSerialProtocolNChoices, m_choiceSerialProtocolChoices, 0);
   // m_choiceSerialProtocol->Bind(wxEVT_MOUSEWHEEL,
   // &ConnectionEditDialog::OnWheelChoice, this);
@@ -549,13 +579,13 @@ void ConnectionEditDialog::Init() {
   // sbSizerConnectionProps->Add(commentSizer, 0, wxEXPAND, 5);
 
   //  Net User Comments
-  m_stNetComment = new wxStaticText(m_scrolledwin, wxID_ANY, _("Description"),
+  m_stNetComment = new wxStaticText(this, wxID_ANY, _("Description"),
                                     wxDefaultPosition, wxDefaultSize, 0);
   m_stNetComment->Wrap(-1);
   m_stNetComment->SetMinSize(wxSize(column1width, -1));
   commentSizer->Add(m_stNetComment, 0, wxALL, 5);
 
-  m_tNetComment = new wxTextCtrl(m_scrolledwin, wxID_ANY, wxEmptyString,
+  m_tNetComment = new wxTextCtrl(this, wxID_ANY, wxEmptyString,
                                  wxDefaultPosition, wxDefaultSize, 0);
   m_tNetComment->SetMaxSize(wxSize(column2width, -1));
   m_tNetComment->SetMinSize(wxSize(column2width, -1));
@@ -563,14 +593,13 @@ void ConnectionEditDialog::Init() {
   commentSizer->Add(m_tNetComment, 1, wxEXPAND | wxTOP, 5);
 
   //  Serial User Comments
-  m_stSerialComment =
-      new wxStaticText(m_scrolledwin, wxID_ANY, _("User Comment"),
-                       wxDefaultPosition, wxDefaultSize, 0);
+  m_stSerialComment = new wxStaticText(this, wxID_ANY, _("User Comment"),
+                                       wxDefaultPosition, wxDefaultSize, 0);
   m_stSerialComment->Wrap(-1);
   m_stSerialComment->SetMinSize(wxSize(column1width, -1));
   commentSizer->Add(m_stSerialComment, 0, wxALL, 5);
 
-  m_tSerialComment = new wxTextCtrl(m_scrolledwin, wxID_ANY, wxEmptyString,
+  m_tSerialComment = new wxTextCtrl(this, wxID_ANY, wxEmptyString,
                                     wxDefaultPosition, wxDefaultSize, 0);
   m_tSerialComment->SetMaxSize(wxSize(column2width, -1));
   m_tSerialComment->SetMinSize(wxSize(column2width, -1));
@@ -585,14 +614,13 @@ void ConnectionEditDialog::Init() {
   fgSizer5->SetNonFlexibleGrowMode(wxFLEX_GROWMODE_SPECIFIED);
   sbSizerConnectionProps->Add(fgSizer5, 0, wxEXPAND, 5);
 
-  m_cbInput =
-      new wxCheckBox(m_scrolledwin, wxID_ANY, _("Receive Input on this Port"),
-                     wxDefaultPosition, wxDefaultSize, 0);
+  m_cbInput = new wxCheckBox(this, wxID_ANY, _("Receive Input on this Port"),
+                             wxDefaultPosition, wxDefaultSize, 0);
   fgSizer5->Add(m_cbInput, 0, wxALL, 2);
   fgSizer5->AddSpacer(1);
 
   m_cbOutput =
-      new wxCheckBox(m_scrolledwin, wxID_ANY,
+      new wxCheckBox(this, wxID_ANY,
                      wxString::Format("%s (%s)", _("Output on this port"),
                                       _("as autopilot or NMEA repeater")),
                      wxDefaultPosition, wxDefaultSize, 0);
@@ -601,32 +629,34 @@ void ConnectionEditDialog::Init() {
 
   // Authentication token
 
-  m_stAuthToken = new wxStaticText(m_scrolledwin, wxID_ANY, _("Auth Token"),
+  auto flags = wxSizerFlags().Border();
+  m_collapse_box = new wxBoxSizer(wxHORIZONTAL);
+
+  m_collapse_box->Add(new wxStaticText(this, wxID_ANY, _("Advanced: ")), flags);
+  m_collapse_box->Add(
+      new ExpandableIcon(this,
+                         [&](bool collapsed) { OnCollapsedToggle(collapsed); }),
+      flags);
+  fgSizer5->Add(m_collapse_box, wxSizerFlags());
+  fgSizer5->Add(new wxStaticText(this, wxID_ANY, ""));
+
+  m_stAuthToken = new wxStaticText(this, wxID_ANY, _("Auth Token"),
                                    wxDefaultPosition, wxDefaultSize, 0);
   m_stAuthToken->SetMinSize(wxSize(column1width, -1));
   m_stAuthToken->Wrap(-1);
   fgSizer5->Add(m_stAuthToken, 0, wxALL, 5);
   m_stAuthToken->Hide();
 
-  m_tAuthToken = new wxTextCtrl(m_scrolledwin, wxID_ANY, wxEmptyString,
+  m_tAuthToken = new wxTextCtrl(this, wxID_ANY, wxEmptyString,
                                 wxDefaultPosition, wxDefaultSize, 0);
   m_tAuthToken->SetMinSize(wxSize(column2width, -1));
   fgSizer5->Add(m_tAuthToken, 1, wxEXPAND | wxTOP, 5);
 
   m_tAuthToken->Hide();
 
-  m_cbCheckCRC = new wxCheckBox(m_scrolledwin, wxID_ANY, _("Control checksum"),
-                                wxDefaultPosition, wxDefaultSize, 0);
-  m_cbCheckCRC->SetValue(TRUE);
-  m_cbCheckCRC->SetToolTip(
-      _("If checked, only the sentences with a valid checksum are passed "
-        "through"));
-  fgSizer5->Add(m_cbCheckCRC, 0, wxALL, 2);
-  fgSizer5->AddSpacer(1);
-
-  m_cbGarminHost = new wxCheckBox(m_scrolledwin, wxID_ANY,
-                                  _("Use Garmin (GRMN) mode for input"),
-                                  wxDefaultPosition, wxDefaultSize, 0);
+  m_cbGarminHost =
+      new wxCheckBox(this, wxID_ANY, _("Use Garmin (GRMN) mode for input"),
+                     wxDefaultPosition, wxDefaultSize, 0);
   m_cbGarminHost->SetValue(FALSE);
   fgSizer5->Add(m_cbGarminHost, 0, wxALL, 2);
   fgSizer5->AddSpacer(1);
@@ -635,7 +665,7 @@ void ConnectionEditDialog::Init() {
   m_cbGarminHost->Hide();
 #endif
 
-  m_cbMultiCast = new wxCheckBox(m_scrolledwin, wxID_ANY, _(" UDP Multicast"),
+  m_cbMultiCast = new wxCheckBox(this, wxID_ANY, _(" UDP Multicast"),
                                  wxDefaultPosition, wxDefaultSize, 0);
   m_cbMultiCast->SetValue(FALSE);
   // m_cbMultiCast->SetToolTip(_("Advanced Use Only. Enable UDP Multicast."));
@@ -643,9 +673,8 @@ void ConnectionEditDialog::Init() {
   fgSizer5->Add(m_cbMultiCast, 0, wxALL, 2);
   fgSizer5->AddSpacer(1);
 
-  m_stPrecision =
-      new wxStaticText(m_scrolledwin, wxID_ANY, _("APB bearing precision"),
-                       wxDefaultPosition, wxDefaultSize, 0);
+  m_stPrecision = new wxStaticText(this, wxID_ANY, _("APB bearing precision"),
+                                   wxDefaultPosition, wxDefaultSize, 0);
 
   m_stPrecision->Wrap(-1);
   fgSizer5->Add(m_stPrecision, 0, wxALL, 2);
@@ -655,7 +684,7 @@ void ConnectionEditDialog::Init() {
   int m_choicePrecisionNChoices =
       sizeof(m_choicePrecisionChoices) / sizeof(wxString);
   m_choicePrecision =
-      new wxChoice(m_scrolledwin, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+      new wxChoice(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
                    m_choicePrecisionNChoices, m_choicePrecisionChoices, 0);
   // m_choicePrecision->Bind(wxEVT_MOUSEWHEEL,
   // &ConnectionEditDialog::OnWheelChoice, this);
@@ -665,7 +694,7 @@ void ConnectionEditDialog::Init() {
 
   // signalK discovery enable
   m_cbCheckSKDiscover =
-      new wxCheckBox(m_scrolledwin, wxID_ANY, _("Automatic server discovery"),
+      new wxCheckBox(this, wxID_ANY, _("Automatic server discovery"),
                      wxDefaultPosition, wxDefaultSize, 0);
   m_cbCheckSKDiscover->SetValue(TRUE);
   m_cbCheckSKDiscover->SetToolTip(
@@ -674,34 +703,30 @@ void ConnectionEditDialog::Init() {
   fgSizer5->Add(m_cbCheckSKDiscover, 0, wxALL, 2);
 
   // signal K "Discover now" button
-  m_ButtonSKDiscover =
-      new wxButton(m_scrolledwin, wxID_ANY, _("Discover now..."),
-                   wxDefaultPosition, wxDefaultSize, 0);
+  m_ButtonSKDiscover = new wxButton(this, wxID_ANY, _("Discover now..."),
+                                    wxDefaultPosition, wxDefaultSize, 0);
   m_ButtonSKDiscover->Hide();
   fgSizer5->Add(m_ButtonSKDiscover, 0, wxALL, 2);
 
   // signalK Server Status
-  m_StaticTextSKServerStatus = new wxStaticText(
-      m_scrolledwin, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, 0);
+  m_StaticTextSKServerStatus =
+      new wxStaticText(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, 0);
   fgSizer5->Add(m_StaticTextSKServerStatus, 0, wxALL, 2);
 
   sbSizerInFilter = new wxStaticBoxSizer(
-      new wxStaticBox(m_scrolledwin, wxID_ANY, _("Input filtering")),
-      wxVERTICAL);
+      new wxStaticBox(this, wxID_ANY, _("Input filtering")), wxVERTICAL);
   sbSizerConnectionProps->Add(sbSizerInFilter,
                               wxSizerFlags().Expand().Border());
 
   wxBoxSizer* bSizer9;
   bSizer9 = new wxBoxSizer(wxHORIZONTAL);
 
-  m_rbIAccept =
-      new wxRadioButton(m_scrolledwin, wxID_ANY, _("Accept only sentences"),
-                        wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
+  m_rbIAccept = new wxRadioButton(this, wxID_ANY, _("Accept only sentences"),
+                                  wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
   bSizer9->Add(m_rbIAccept, 0, wxALL, 5);
 
-  m_rbIIgnore =
-      new wxRadioButton(m_scrolledwin, wxID_ANY, _("Ignore sentences"),
-                        wxDefaultPosition, wxDefaultSize, 0);
+  m_rbIIgnore = new wxRadioButton(this, wxID_ANY, _("Ignore sentences"),
+                                  wxDefaultPosition, wxDefaultSize, 0);
   bSizer9->Add(m_rbIIgnore, 0, wxALL, 5);
 
   sbSizerInFilter->Add(bSizer9, 0, wxEXPAND, 5);
@@ -711,31 +736,28 @@ void ConnectionEditDialog::Init() {
   sbSizerInFilter->Add(bSizer11, 0, wxEXPAND, 5);
 
   m_tcInputStc =
-      new wxTextCtrl(m_scrolledwin, wxID_ANY, wxEmptyString, wxDefaultPosition,
+      new wxTextCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition,
                      wxDefaultSize, wxTE_READONLY);
   bSizer11->Add(m_tcInputStc, 1, wxALL | wxEXPAND, 5);
 
-  m_btnInputStcList =
-      new wxButton(m_scrolledwin, wxID_ANY, "...", wxDefaultPosition,
-                   wxDefaultSize, wxBU_EXACTFIT);
+  m_btnInputStcList = new wxButton(this, wxID_ANY, "...", wxDefaultPosition,
+                                   wxDefaultSize, wxBU_EXACTFIT);
   bSizer11->Add(m_btnInputStcList, 0, wxALL, 5);
 
   bSizer11->AddSpacer(GetCharWidth() * 5);
 
   sbSizerOutFilter = new wxStaticBoxSizer(
-      new wxStaticBox(m_scrolledwin, wxID_ANY, _("Output filtering")),
-      wxVERTICAL);
+      new wxStaticBox(this, wxID_ANY, _("Output filtering")), wxVERTICAL);
   sbSizerConnectionProps->Add(sbSizerOutFilter, 0, wxEXPAND, 5);
 
   wxBoxSizer* bSizer10;
   bSizer10 = new wxBoxSizer(wxHORIZONTAL);
 
-  m_rbOAccept =
-      new wxRadioButton(m_scrolledwin, wxID_ANY, _("Transmit sentences"),
-                        wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
+  m_rbOAccept = new wxRadioButton(this, wxID_ANY, _("Transmit sentences"),
+                                  wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
   bSizer10->Add(m_rbOAccept, 0, wxALL, 5);
 
-  m_rbOIgnore = new wxRadioButton(m_scrolledwin, wxID_ANY, _("Drop sentences"),
+  m_rbOIgnore = new wxRadioButton(this, wxID_ANY, _("Drop sentences"),
                                   wxDefaultPosition, wxDefaultSize, 0);
   bSizer10->Add(m_rbOIgnore, 0, wxALL, 5);
 
@@ -746,23 +768,17 @@ void ConnectionEditDialog::Init() {
   sbSizerOutFilter->Add(bSizer12, 0, wxEXPAND, 5);
 
   m_tcOutputStc =
-      new wxTextCtrl(m_scrolledwin, wxID_ANY, wxEmptyString, wxDefaultPosition,
+      new wxTextCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition,
                      wxDefaultSize, wxTE_READONLY);
   bSizer12->Add(m_tcOutputStc, 1, wxALL | wxEXPAND, 5);
 
-  m_btnOutputStcList =
-      new wxButton(m_scrolledwin, wxID_ANY, "...", wxDefaultPosition,
-                   wxDefaultSize, wxBU_EXACTFIT);
+  m_btnOutputStcList = new wxButton(this, wxID_ANY, "...", wxDefaultPosition,
+                                    wxDefaultSize, wxBU_EXACTFIT);
   bSizer12->Add(m_btnOutputStcList, 0, wxALL, 5);
 
   bSizer12->AddSpacer(GetCharWidth() * 5);
 
   sbSizerConnectionProps->AddSpacer(20);
-
-  m_more = new wxStaticText(m_scrolledwin, wxID_ANY, "4 chars",
-                            wxDefaultPosition, wxDefaultSize, wxALIGN_LEFT);
-  m_more->SetLabelMarkup(MORE);
-  sbSizerConnectionProps->Add(m_more, wxSizerFlags().Border());
 
   ConnectControls();
 
@@ -776,7 +792,7 @@ void ConnectionEditDialog::Init() {
   ShowNMEACAN(false);
   connectionsaved = TRUE;
 
-  GetSizer()->Fit(m_scrolledwin);
+  GetSizer()->Fit(this);
 
   new_device_listener.Init(SystemEvents::GetInstance().evt_dev_change,
                            [&](ObservedEvt&) { LoadSerialPorts(m_comboPort); });
@@ -962,7 +978,6 @@ void ConnectionEditDialog::ShowNMEACommon(bool visible) {
   m_stPrecision->Show(visible && advanced);
   m_choicePrecision->Show(visible && advanced);
   m_stPrecision->Show(visible && advanced);
-  m_cbCheckCRC->Show(visible && advanced);
   m_stAuthToken->Show(visible && advanced);
   m_tAuthToken->Show(visible && advanced);
   if (visible) {
@@ -1141,10 +1156,9 @@ void ConnectionEditDialog::ClearNMEAForm(void) {
 
 void ConnectionEditDialog::SetDSFormOptionVizStates(void) {
   bool advanced = m_advanced;
-  m_more->Show(true);
+  m_collapse_box->ShowItems(true);
   m_cbInput->Show();
   m_cbOutput->Show();
-  m_cbCheckCRC->Show(advanced);
   m_stPrecision->Show(true);
   m_choicePrecision->Show(true);
 
@@ -1174,7 +1188,6 @@ void ConnectionEditDialog::SetDSFormOptionVizStates(void) {
       ShowInFilter(false);
       m_stPrecision->Hide();
       m_choicePrecision->Hide();
-      m_cbCheckCRC->Hide();
       m_stNetDataProtocol->Hide();
       m_choiceNetDataProtocol->Hide();
     } else {
@@ -1204,9 +1217,8 @@ void ConnectionEditDialog::SetDSFormOptionVizStates(void) {
     ShowInFilter(false);
     m_stPrecision->Hide();
     m_choicePrecision->Hide();
-    m_cbCheckCRC->Hide();
     m_cbGarminHost->Hide();
-    m_more->Hide();
+    m_collapse_box->ShowItems(false);
   }
 
   if (m_rbTypeInternalBT && m_rbTypeInternalBT->GetValue()) {
@@ -1240,11 +1252,10 @@ void ConnectionEditDialog::SetDSFormOptionVizStates(void) {
 
     m_stPrecision->Hide();
     m_choicePrecision->Hide();
-    m_cbCheckCRC->Hide();
 
     m_stNetDataProtocol->Hide();
     m_choiceNetDataProtocol->Hide();
-    m_more->Hide();
+    m_collapse_box->Show(false);
   }
 
   if (m_rbTypeNet->GetValue()) {
@@ -1255,7 +1266,6 @@ void ConnectionEditDialog::SetDSFormOptionVizStates(void) {
       m_cbOutput->Hide();
       ShowInFilter(false);
       ShowOutFilter(false);
-      m_cbCheckCRC->Hide();
       m_stPrecision->Hide();
       m_choicePrecision->Hide();
       m_ButtonSKDiscover->Hide();
@@ -1265,7 +1275,7 @@ void ConnectionEditDialog::SetDSFormOptionVizStates(void) {
       m_stNetDataProtocol->Hide();
       m_choiceNetDataProtocol->Hide();
       m_cbGarminHost->Hide();
-      m_more->Hide();
+      m_collapse_box->Show(false);
 
     } else if (m_rbNetProtoSignalK->GetValue()) {
       m_cbMultiCast->Hide();
@@ -1273,7 +1283,6 @@ void ConnectionEditDialog::SetDSFormOptionVizStates(void) {
       m_cbOutput->Hide();
       ShowInFilter(false);
       ShowOutFilter(false);
-      m_cbCheckCRC->Hide();
       m_stPrecision->Hide();
       m_choicePrecision->Hide();
       m_stNetDataProtocol->Hide();
@@ -1294,13 +1303,12 @@ void ConnectionEditDialog::SetDSFormOptionVizStates(void) {
 
       if ((DataProtocol)m_choiceNetDataProtocol->GetSelection() ==
           DataProtocol::PROTO_NMEA2000) {
-        m_cbCheckCRC->Hide();
         m_stPrecision->Hide();
         m_choicePrecision->Hide();
 
         ShowInFilter(false);
         ShowOutFilter(false);
-        if (m_rbNetProtoTCP->GetValue()) m_more->Hide();
+        if (m_rbNetProtoTCP->GetValue()) m_collapse_box->ShowItems(false);
       }
       if ((DataProtocol)m_choiceNetDataProtocol->GetSelection() ==
           DataProtocol::PROTO_NMEA0183) {
@@ -1378,6 +1386,7 @@ void ConnectionEditDialog::ShowOutFilter(bool bshow) {
 }
 
 void ConnectionEditDialog::PreloadControls(ConnectionParams* cp) {
+  m_cp_original = cp;
   SetConnectionParams(cp);
 }
 
@@ -1387,7 +1396,6 @@ void ConnectionEditDialog::SetConnectionParams(ConnectionParams* cp) {
 
   m_comboPort->Select(m_comboPort->FindString(cp->Port));
 
-  m_cbCheckCRC->SetValue(cp->ChecksumCheck);
   m_cbGarminHost->SetValue(cp->Garmin);
   m_cbInput->SetValue(cp->IOSelect != DS_TYPE_OUTPUT);
   m_cbOutput->SetValue(cp->IOSelect != DS_TYPE_INPUT);
@@ -1494,7 +1502,6 @@ void ConnectionEditDialog::SetDefaultConnectionParams(void) {
     m_comboPort->Select(0);
     m_comboPort->SetValue(wxEmptyString);  // These two broke it
   }
-  m_cbCheckCRC->SetValue(TRUE);
   m_cbGarminHost->SetValue(FALSE);
   m_cbInput->SetValue(TRUE);
   m_cbOutput->SetValue(FALSE);
@@ -1545,8 +1552,8 @@ void ConnectionEditDialog::SetDefaultConnectionParams(void) {
 void ConnectionEditDialog::LayoutDialog() {
   gSizerNetProps->Layout();
   gSizerSerProps->Layout();
-  m_scrolledwin->Layout();
-  m_scrolledwin->Fit();
+  this->Layout();
+  this->Fit();
   GetSizer()->Layout();
 }
 
@@ -1691,7 +1698,6 @@ void ConnectionEditDialog::OnCbOutput(wxCommandEvent& event) {
             cp->IOSelect == DS_TYPE_INPUT) {
           //  More: View the filter handler
           m_advanced = true;
-          m_more->SetLabelMarkup(m_advanced ? LESS : MORE);
           SetNMEAFormForNetProtocol();
           LayoutDialog();
 
@@ -1754,10 +1760,8 @@ void ConnectionEditDialog::OnCbMultiCast(wxCommandEvent& event) {
   LayoutDialog();
 }
 
-void ConnectionEditDialog::OnClickMore(wxMouseEvent& event) {
-  // m_cbAdvanced->SetValue(!m_cbAdvanced->IsChecked());
-  m_advanced = !m_advanced;
-  m_more->SetLabelMarkup(m_advanced ? LESS : MORE);
+void ConnectionEditDialog::OnCollapsedToggle(bool collapsed) {
+  m_advanced = !collapsed;
   if (m_rbTypeNet->GetValue())
     SetNMEAFormForNetProtocol();
   else
@@ -2051,7 +2055,7 @@ ConnectionParams* ConnectionEditDialog::UpdateConnectionParamsFromControls(
         (DataProtocol)m_choiceNetDataProtocol->GetSelection();
 
   pConnectionParams->Baudrate = wxAtoi(m_choiceBaudRate->GetStringSelection());
-  pConnectionParams->ChecksumCheck = m_cbCheckCRC->GetValue();
+  pConnectionParams->ChecksumCheck = true;
   pConnectionParams->AutoSKDiscover = m_cbCheckSKDiscover->GetValue();
   pConnectionParams->Garmin = m_cbGarminHost->GetValue();
   pConnectionParams->InputSentenceList =
@@ -2092,6 +2096,7 @@ ConnectionParams* ConnectionEditDialog::UpdateConnectionParamsFromControls(
     pConnectionParams->NetworkPort = 0;
     pConnectionParams->NetProtocol = PROTO_UNDEFINED;
     pConnectionParams->Baudrate = 0;
+    pConnectionParams->Port = "Internal GPS";
   }
 
   if (pConnectionParams->Type == INTERNAL_BT) {
@@ -2187,10 +2192,6 @@ void ConnectionEditDialog::ConnectControls() {
   m_cbMultiCast->Connect(
       wxEVT_COMMAND_CHECKBOX_CLICKED,
       wxCommandEventHandler(ConnectionEditDialog::OnCbMultiCast), NULL, this);
-  // m_cbAdvanced->Connect(
-  //    wxEVT_COMMAND_CHECKBOX_CLICKED,
-  //    wxCommandEventHandler(ConnectionEditDialog::OnCbAdvanced), NULL, this);
-  m_more->Bind(wxEVT_LEFT_DOWN, &ConnectionEditDialog::OnClickMore, this);
 
   // input/output control
   m_cbInput->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED,

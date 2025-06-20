@@ -1761,6 +1761,8 @@ void options::Init(void) {
   m_pagePlugins = -1;
   m_pageConnections = -1;
 
+  pEnableTenHertz = nullptr;
+
   auto loader = PluginLoader::GetInstance();
   b_haveWMM = loader && loader->IsPlugInAvailable(_T("WMM"));
   b_oldhaveWMM = b_haveWMM;
@@ -1964,12 +1966,16 @@ void options::CreatePanel_NMEA(size_t parent, int border_size,
 
   comm_dialog =
       std::make_shared<ConnectionsDlg>(m_pNMEAForm, TheConnectionParams());
-  // Hijacks the options | Resize event for use by comm_dialog only.
+  // Hijack the options | Resize event for use by comm_dialog only.
   // Needs new solution if other pages also have a need to act on it.
   Bind(wxEVT_SIZE, [&](wxSizeEvent& ev) {
-    comm_dialog->OnResize();
+    auto w = m_pListbook->GetCurrentPage();
+    comm_dialog->OnResize(w ? w->GetClientSize() : wxSize());
     ev.Skip();
   });
+#ifdef __ANDROID__
+  comm_dialog->GetHandle()->setStyleSheet(getAdjustedDialogStyleSheet());
+#endif
 }
 
 void options::CreatePanel_Ownship(size_t parent, int border_size,
@@ -4150,35 +4156,13 @@ void options::CreatePanel_Display(size_t parent, int border_size,
     pEnableZoomToCursor->SetValue(FALSE);
     boxCtrls->Add(pEnableZoomToCursor, verticleInputFlags);
 
+    pEnableTenHertz = nullptr;
+#ifndef ANDROID
     pEnableTenHertz = new wxCheckBox(pDisplayPanel, ID_TENHZCHECKBOX,
                                      _("Enable Ten Hz screen update"));
     pEnableTenHertz->SetValue(FALSE);
     boxCtrls->Add(pEnableTenHertz, verticleInputFlags);
-
-    // spacer
-    generalSizer->Add(0, border_size * 4);
-    generalSizer->Add(0, border_size * 4);
-
-    // Selection of timezone for date/time display format:
-    // UTC, local time, or specific time zone.
-    generalSizer->Add(
-        new wxStaticText(pDisplayPanel, wxID_ANY, _("Date and Time")),
-        groupLabelFlags);
-
-    wxBoxSizer* timezoneStyleBox = new wxBoxSizer(wxHORIZONTAL);
-    generalSizer->Add(timezoneStyleBox, groupInputFlags);
-    wxBoxSizer* itemTimezoneBoxSizer = new wxBoxSizer(wxHORIZONTAL);
-    timezoneStyleBox->Add(itemTimezoneBoxSizer, 1, wxEXPAND | wxALL,
-                          border_size);
-    pTimezoneLocalTime =
-        new wxRadioButton(pDisplayPanel, ID_TIMEZONE_LOCAL_TIME,
-                          _("Local Time"), wxDefaultPosition, wxDefaultSize, 0);
-    itemTimezoneBoxSizer->Add(pTimezoneLocalTime, 0,
-                              wxALIGN_CENTER_VERTICAL | wxRIGHT, border_size);
-    pTimezoneUTC = new wxRadioButton(pDisplayPanel, ID_TIMEZONE_UTC, _("UTC"),
-                                     wxDefaultPosition, wxDefaultSize, 0);
-    itemTimezoneBoxSizer->Add(pTimezoneUTC, 0,
-                              wxALIGN_CENTER_VERTICAL | wxRIGHT, border_size);
+#endif
 
     if (!g_useMUI) {
       // spacer
@@ -4589,6 +4573,30 @@ void options::CreatePanel_Units(size_t parent, int border_size,
     unitsSizer->Add(0, border_size * 4);
     unitsSizer->Add(0, border_size * 4);
 
+    // Selection of timezone for date/time display format:
+    // UTC, local time, or specific time zone.
+    unitsSizer->Add(new wxStaticText(panelUnits, wxID_ANY, _("Date and Time")),
+                    groupLabelFlags);
+
+    wxBoxSizer* timezoneStyleBox = new wxBoxSizer(wxHORIZONTAL);
+    unitsSizer->Add(timezoneStyleBox, groupInputFlags);
+    wxBoxSizer* itemTimezoneBoxSizer = new wxBoxSizer(wxHORIZONTAL);
+    timezoneStyleBox->Add(itemTimezoneBoxSizer, 1, wxEXPAND | wxALL,
+                          border_size);
+    pTimezoneLocalTime =
+        new wxRadioButton(panelUnits, ID_TIMEZONE_LOCAL_TIME, _("Local Time"),
+                          wxDefaultPosition, wxDefaultSize, 0);
+    itemTimezoneBoxSizer->Add(pTimezoneLocalTime, 0,
+                              wxALIGN_CENTER_VERTICAL | wxRIGHT, border_size);
+    pTimezoneUTC = new wxRadioButton(panelUnits, ID_TIMEZONE_UTC, _("UTC"),
+                                     wxDefaultPosition, wxDefaultSize, 0);
+    itemTimezoneBoxSizer->Add(pTimezoneUTC, 0,
+                              wxALIGN_CENTER_VERTICAL | wxRIGHT, border_size);
+
+    // spacer
+    unitsSizer->Add(0, border_size * 4);
+    unitsSizer->Add(0, border_size * 4);
+
     // bearings (magnetic/true, variation)
     unitsSizer->Add(new wxStaticText(panelUnits, wxID_ANY, _("Bearings")),
                     groupLabelFlags);
@@ -4725,6 +4733,30 @@ void options::CreatePanel_Units(size_t parent, int border_size,
         new wxChoice(panelUnits, ID_SDMMFORMATCHOICE, wxDefaultPosition,
                      wxDefaultSize, m_SDMMFormatsNChoices, pSDMMFormats);
     unitsSizer->Add(pSDMMFormat, inputFlags);
+
+    // spacer
+    unitsSizer->Add(0, border_size * 4);
+    unitsSizer->Add(0, border_size * 4);
+
+    // Selection of timezone for date/time display format:
+    // UTC, local time, or specific time zone.
+    unitsSizer->Add(new wxStaticText(panelUnits, wxID_ANY, _("Date and Time")),
+                    groupLabelFlags);
+
+    wxBoxSizer* timezoneStyleBox = new wxBoxSizer(wxHORIZONTAL);
+    unitsSizer->Add(timezoneStyleBox, groupInputFlags);
+    wxBoxSizer* itemTimezoneBoxSizer = new wxBoxSizer(wxHORIZONTAL);
+    timezoneStyleBox->Add(itemTimezoneBoxSizer, 1, wxEXPAND | wxALL,
+                          border_size);
+    pTimezoneLocalTime =
+        new wxRadioButton(panelUnits, ID_TIMEZONE_LOCAL_TIME, _("Local Time"),
+                          wxDefaultPosition, wxDefaultSize, 0);
+    itemTimezoneBoxSizer->Add(pTimezoneLocalTime, 0,
+                              wxALIGN_CENTER_VERTICAL | wxRIGHT, border_size);
+    pTimezoneUTC = new wxRadioButton(panelUnits, ID_TIMEZONE_UTC, _("UTC"),
+                                     wxDefaultPosition, wxDefaultSize, 0);
+    itemTimezoneBoxSizer->Add(pTimezoneUTC, 0,
+                              wxALIGN_CENTER_VERTICAL | wxRIGHT, border_size);
 
     // spacer
     unitsSizer->Add(0, border_size * 4);
@@ -5171,17 +5203,28 @@ void options::CreatePanel_AIS(size_t parent, int border_size,
   m_pCheck_CPA_Max = new wxCheckBox(
       panelAIS, -1,
       _("No (T)CPA Alerts if target range is greater than (NMi)"));
+  m_pCheck_CPA_Max->SetToolTip(
+      _("Disable CPA (Closest Point of Approach) and TCPA (Time to CPA) alerts "
+        "for targets beyond this distance from your vessel"));
   pCPAGrid->Add(m_pCheck_CPA_Max, 0, wxALL, group_item_spacing);
 
   m_pText_CPA_Max = new wxTextCtrl(panelAIS, -1, "TEXT  ");
+  m_pText_CPA_Max->SetToolTip(
+      _("Maximum distance in nautical miles at which Closest Point of Approach "
+        "alerts will be triggered"));
   pCPAGrid->Add(m_pText_CPA_Max, 0, wxALL | wxALIGN_RIGHT, group_item_spacing);
 
   m_pCheck_CPA_Warn =
       new wxCheckBox(panelAIS, -1, _("Warn if CPA less than (NMi)"));
+  m_pCheck_CPA_Warn->SetToolTip(
+      _("Enable warning alerts when targets have a Closest Point of Approach "
+        "less than this distance"));
   pCPAGrid->Add(m_pCheck_CPA_Warn, 0, wxALL, group_item_spacing);
 
   m_pText_CPA_Warn =
       new wxTextCtrl(panelAIS, -1, "TEXT  ", wxDefaultPosition, wxSize(-1, -1));
+  m_pText_CPA_Warn->SetToolTip(
+      _("Distance threshold in nautical miles for CPA warning alerts"));
   pCPAGrid->Add(m_pText_CPA_Warn, 0, wxALL | wxALIGN_RIGHT, group_item_spacing);
 
   m_pCheck_CPA_Warn->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED,
@@ -5190,9 +5233,14 @@ void options::CreatePanel_AIS(size_t parent, int border_size,
 
   m_pCheck_CPA_WarnT =
       new wxCheckBox(panelAIS, -1, _("...and TCPA is less than (min)"));
+  m_pCheck_CPA_WarnT->SetToolTip(
+      _("Additional time constraint - alerts only occur if the Time to Closest "
+        "Point of Approach is less than this value"));
   pCPAGrid->Add(m_pCheck_CPA_WarnT, 0, wxALL, group_item_spacing);
 
   m_pText_CPA_WarnT = new wxTextCtrl(panelAIS, -1, "TEXT  ");
+  m_pText_CPA_WarnT->SetToolTip(
+      _("Time threshold in minutes for TCPA constraints"));
   pCPAGrid->Add(m_pText_CPA_WarnT, 0, wxALL | wxALIGN_RIGHT,
                 group_item_spacing);
 
@@ -5207,17 +5255,28 @@ void options::CreatePanel_AIS(size_t parent, int border_size,
 
   m_pCheck_Mark_Lost =
       new wxCheckBox(panelAIS, -1, _("Mark targets as lost after (min)"));
+  m_pCheck_Mark_Lost->SetToolTip(
+      _("Targets will be considered lost when no update is received for this "
+        "time period"));
   pLostGrid->Add(m_pCheck_Mark_Lost, 1, wxALL, group_item_spacing);
 
   m_pText_Mark_Lost = new wxTextCtrl(panelAIS, -1, "TEXT  ");
+  m_pText_Mark_Lost->SetToolTip(
+      _("Time in minutes after which targets with no updates are marked as "
+        "lost"));
   pLostGrid->Add(m_pText_Mark_Lost, 1, wxALL | wxALIGN_RIGHT,
                  group_item_spacing);
 
   m_pCheck_Remove_Lost =
       new wxCheckBox(panelAIS, -1, _("Remove lost targets after (min)"));
+  m_pCheck_Remove_Lost->SetToolTip(
+      _("Lost targets will be completely removed from display after this "
+        "additional time period"));
   pLostGrid->Add(m_pCheck_Remove_Lost, 1, wxALL, group_item_spacing);
 
   m_pText_Remove_Lost = new wxTextCtrl(panelAIS, -1, "TEXT  ");
+  m_pText_Remove_Lost->SetToolTip(_(
+      "Time in minutes after which lost targets are removed from the display"));
   pLostGrid->Add(m_pText_Remove_Lost, 1, wxALL | wxALIGN_RIGHT,
                  group_item_spacing);
 
@@ -5234,9 +5293,15 @@ void options::CreatePanel_AIS(size_t parent, int border_size,
 
   m_pCheck_Show_COG = new wxCheckBox(
       panelAIS, -1, _("Show target COG predictor arrow, length (min)"));
+  m_pCheck_Show_COG->SetToolTip(
+      _("Display a predictor arrow for each AIS target, showing its projected "
+        "course over ground for the specified number of minutes."));
   pDisplayGrid->Add(m_pCheck_Show_COG, 1, wxALL | wxEXPAND, group_item_spacing);
 
   m_pText_COG_Predictor = new wxTextCtrl(panelAIS, -1, "TEXT  ");
+  m_pText_COG_Predictor->SetToolTip(
+      _("Set the length in minutes for the COG predictor arrow for AIS "
+        "targets."));
   pDisplayGrid->Add(m_pText_COG_Predictor, 1, wxALL | wxALIGN_RIGHT,
                     group_item_spacing);
 
@@ -5252,6 +5317,9 @@ void options::CreatePanel_AIS(size_t parent, int border_size,
 
   m_pCheck_Show_Tracks =
       new wxCheckBox(panelAIS, -1, _("Show target tracks, length (min)"));
+  m_pCheck_Show_Tracks->SetToolTip(
+      _("Display the recent track (history) of each AIS target for the "
+        "specified number of minutes."));
   pDisplayGrid->Add(m_pCheck_Show_Tracks, 1, wxALL, group_item_spacing);
 
   m_pText_Track_Length = new wxTextCtrl(panelAIS, -1, "TEXT  ");
@@ -5260,6 +5328,9 @@ void options::CreatePanel_AIS(size_t parent, int border_size,
 
   m_pCheck_Hide_Moored = new wxCheckBox(
       panelAIS, -1, _("Suppress anchored/moored targets, speed max (kn)"));
+  m_pCheck_Hide_Moored->SetToolTip(
+      _("Hide AIS targets that are moving slower than this speed, typically "
+        "indicating they are anchored or moored."));
   pDisplayGrid->Add(m_pCheck_Hide_Moored, 1, wxALL, group_item_spacing);
 
   m_pText_Moored_Speed = new wxTextCtrl(panelAIS, -1, "TEXT  ");
@@ -5268,6 +5339,9 @@ void options::CreatePanel_AIS(size_t parent, int border_size,
 
   m_pCheck_Draw_Realtime_Prediction = new wxCheckBox(
       panelAIS, -1, _("Draw AIS realtime prediction, target speed min (kn)"));
+  m_pCheck_Draw_Realtime_Prediction->SetToolTip(
+      _("Show a real-time prediction vector for AIS targets moving faster than "
+        "this speed."));
   pDisplayGrid->Add(m_pCheck_Draw_Realtime_Prediction, 1, wxALL,
                     group_item_spacing);
 
@@ -5278,6 +5352,9 @@ void options::CreatePanel_AIS(size_t parent, int border_size,
   m_pCheck_Scale_Priority = new wxCheckBox(
       panelAIS, -1,
       _("Allow attenuation of less critical targets if more than ... targets"));
+  m_pCheck_Scale_Priority->SetToolTip(
+      _("Reduce the display prominence of less critical AIS targets when the "
+        "number of targets exceeds the specified value."));
   pDisplayGrid->Add(m_pCheck_Scale_Priority, 1, wxALL, group_item_spacing);
 
   m_pText_Scale_Priority = new wxTextCtrl(panelAIS, -1, "TEXT  ");
@@ -5286,6 +5363,8 @@ void options::CreatePanel_AIS(size_t parent, int border_size,
 
   m_pCheck_Show_Area_Notices = new wxCheckBox(
       panelAIS, -1, _("Show area notices (from AIS binary messages)"));
+  m_pCheck_Show_Area_Notices->SetToolTip(
+      _("Display area notices received via AIS binary messages on the chart."));
   pDisplayGrid->Add(m_pCheck_Show_Area_Notices, 1, wxALL, group_item_spacing);
 
   wxStaticText* pStatic_Dummy5 = new wxStaticText(panelAIS, -1, _T(""));
@@ -5293,6 +5372,9 @@ void options::CreatePanel_AIS(size_t parent, int border_size,
 
   m_pCheck_Draw_Target_Size =
       new wxCheckBox(panelAIS, -1, _("Show AIS targets real size"));
+  m_pCheck_Draw_Target_Size->SetToolTip(
+      _("Display AIS targets using their actual reported size and shape on the "
+        "chart."));
   pDisplayGrid->Add(m_pCheck_Draw_Target_Size, 1, wxALL, group_item_spacing);
 
   wxStaticText* pStatic_Dummy6 = new wxStaticText(panelAIS, -1, _T(""));
@@ -5300,6 +5382,9 @@ void options::CreatePanel_AIS(size_t parent, int border_size,
 
   m_pCheck_Show_Target_Name = new wxCheckBox(
       panelAIS, -1, _("Show names with AIS targets at scale greater than 1:"));
+  m_pCheck_Show_Target_Name->SetToolTip(
+      _("Display the name of AIS targets when the chart scale is greater than "
+        "the specified value."));
   pDisplayGrid->Add(m_pCheck_Show_Target_Name, 1, wxALL, group_item_spacing);
 
   m_pText_Show_Target_Name_Scale = new wxTextCtrl(panelAIS, -1, "TEXT     ");
@@ -5308,11 +5393,18 @@ void options::CreatePanel_AIS(size_t parent, int border_size,
 
   m_pCheck_use_Wpl = new wxCheckBox(
       panelAIS, -1, _("Use WPL position messages. Action when received:"));
+  m_pCheck_use_Wpl->SetToolTip(
+      _("Enable processing of WPL (Waypoint Location) position messages from "
+        "AIS and select the action to take when received."));
   pDisplayGrid->Add(m_pCheck_use_Wpl, 1, wxALL, group_item_spacing);
 
   wxString Wpl_Action[] = {_("APRS position report"), _("Create mark")};
   m_pWplAction = new wxChoice(panelAIS, wxID_ANY, wxDefaultPosition,
                               wxDefaultSize, 2, Wpl_Action);
+  m_pWplAction->SetToolTip(
+      _("Select the action to perform when a WPL message is received: create "
+        "an Automatic Packet Reporting System (APRS) report or a mark on the "
+        "chart."));
   pDisplayGrid->Add(m_pWplAction, 1, wxALIGN_RIGHT | wxALL, group_item_spacing);
 
   // Rollover
@@ -5323,6 +5415,9 @@ void options::CreatePanel_AIS(size_t parent, int border_size,
 
   pRollover = new wxCheckBox(panelAIS, ID_ROLLOVERBOX,
                              _("Enable route/AIS info block"));
+  pRollover->SetToolTip(
+      _("Show a popup info block with details about routes and AIS targets "
+        "when hovering over them."));
   rolloverSizer->Add(pRollover, 1, wxALL, 2 * group_item_spacing);
 
   pRollover->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED,
@@ -5331,16 +5426,27 @@ void options::CreatePanel_AIS(size_t parent, int border_size,
 
   pStatic_CallSign =
       new wxStaticText(panelAIS, -1, _("\"Ship Name\" MMSI (Call Sign)"));
+  pStatic_CallSign->SetToolTip(
+      _("Display the ship name and MMSI (call sign) in the rollover info "
+        "block."));
   rolloverSizer->Add(pStatic_CallSign, 1, wxALL, 2 * group_item_spacing);
 
   m_pCheck_Rollover_Class =
       new wxCheckBox(panelAIS, -1, _("[Class] Type (Status)"));
+  m_pCheck_Rollover_Class->SetToolTip(
+      _("Show the AIS class, type, and status in the rollover info block."));
   rolloverSizer->Add(m_pCheck_Rollover_Class, 1, wxALL, 2 * group_item_spacing);
 
   m_pCheck_Rollover_COG = new wxCheckBox(panelAIS, -1, _("SOG COG"));
+  m_pCheck_Rollover_COG->SetToolTip(
+      _("Show speed over ground (SOG) and course over ground (COG) in the "
+        "rollover info block."));
   rolloverSizer->Add(m_pCheck_Rollover_COG, 1, wxALL, 2 * group_item_spacing);
 
   m_pCheck_Rollover_CPA = new wxCheckBox(panelAIS, -1, _("CPA TCPA"));
+  m_pCheck_Rollover_CPA->SetToolTip(
+      _("Show Closest Point of Approach (CPA) and time to CPA (TCPA) in the "
+        "rollover info block."));
   rolloverSizer->Add(m_pCheck_Rollover_CPA, 1, wxALL, 2 * group_item_spacing);
 
   //      Alert Box
@@ -5962,18 +6068,22 @@ void options::CreateControls(void) {
   m_pListbook->SetImageList(m_topImgList);
   itemBoxSizer2->Add(m_pListbook, 1, wxALL | wxEXPAND, border_size);
 
-  wxBoxSizer* buttons = new wxBoxSizer(wxHORIZONTAL);
-  itemBoxSizer2->Add(buttons, 0, wxALIGN_RIGHT | wxALL, border_size);
+  m_OK_Cancel_Apply_buttons = new wxBoxSizer(wxHORIZONTAL);
+  itemBoxSizer2->Add(m_OK_Cancel_Apply_buttons, 0, wxALIGN_RIGHT | wxALL,
+                     border_size);
 
   m_OKButton = new wxButton(itemDialog1, xID_OK, _("Ok"));
   m_OKButton->SetDefault();
-  buttons->Add(m_OKButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, border_size);
+  m_OK_Cancel_Apply_buttons->Add(m_OKButton, 0, wxALIGN_CENTER_VERTICAL | wxALL,
+                                 border_size);
 
   m_CancelButton = new wxButton(itemDialog1, wxID_CANCEL, _("Cancel"));
-  buttons->Add(m_CancelButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, border_size);
+  m_OK_Cancel_Apply_buttons->Add(m_CancelButton, 0,
+                                 wxALIGN_CENTER_VERTICAL | wxALL, border_size);
 
   m_ApplyButton = new wxButton(itemDialog1, ID_APPLY, _("Apply"));
-  buttons->Add(m_ApplyButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, border_size);
+  m_OK_Cancel_Apply_buttons->Add(m_ApplyButton, 0,
+                                 wxALIGN_CENTER_VERTICAL | wxALL, border_size);
 
   m_pageDisplay = CreatePanel(_("Display"));
   CreatePanel_Display(m_pageDisplay, border_size, group_item_spacing);
@@ -6101,6 +6211,9 @@ void options::SetColorScheme(ColorScheme cs) {
   }
 
 #endif
+
+  //  Some panels need specific color change method
+  comm_dialog->SetColorScheme(cs);
 }
 
 void options::OnAISRolloverClick(wxCommandEvent& event) {
@@ -6327,7 +6440,7 @@ void options::SetInitialSettings(void) {
   pSogCogFromLLDampInterval->SetValue(g_own_ship_sog_cog_calc_damp_sec);
 
   if (pEnableZoomToCursor) pEnableZoomToCursor->SetValue(g_bEnableZoomToCursor);
-  pEnableTenHertz->SetValue(g_btenhertz);
+  if (pEnableTenHertz) pEnableTenHertz->SetValue(g_btenhertz);
 
   if (pPreserveScale) pPreserveScale->SetValue(g_bPreserveScaleOnX);
   pPlayShipsBells->SetValue(g_bPlayShipsBells);
@@ -7320,7 +7433,7 @@ void options::ApplyChanges(wxCommandEvent& event) {
   if (pEnableZoomToCursor)
     g_bEnableZoomToCursor = pEnableZoomToCursor->GetValue();
 
-  g_btenhertz = pEnableTenHertz->GetValue();
+  if (pEnableTenHertz) g_btenhertz = pEnableTenHertz->GetValue();
 
 #ifdef __ANDROID__
   g_bEnableZoomToCursor = false;
@@ -7651,19 +7764,16 @@ void options::ApplyChanges(wxCommandEvent& event) {
   if (g_canvasConfig != m_screenConfig) m_returnChanges |= CONFIG_CHANGED;
   g_canvasConfig = m_screenConfig;
 
-  // if (event.GetId() == ID_APPLY)
-  {
-    gFrame->ProcessOptionsDialog(m_returnChanges, m_pWorkDirList);
-    m_CurrentDirList =
-        *m_pWorkDirList;  // Perform a deep copy back to main database.
+  gFrame->ProcessOptionsDialog(m_returnChanges, m_pWorkDirList);
+  m_CurrentDirList =
+      *m_pWorkDirList;  // Perform a deep copy back to main database.
 
-    //  We can clear a few flag bits on "Apply", so they won't be recognised at
-    //  the "Close" click. Their actions have already been accomplished once...
-    // m_returnChanges &= ~(CHANGE_CHARTS | FORCE_UPDATE | SCAN_UPDATE);
-    // k_charts = 0;
+  //  We can clear a few flag bits on "Apply", so they won't be recognised at
+  //  the "Close" click. Their actions have already been accomplished once...
+  m_returnChanges &= ~(CHANGE_CHARTS | FORCE_UPDATE | SCAN_UPDATE);
+  k_charts = 0;
 
-    gFrame->RefreshAllCanvas();
-  }
+  gFrame->RefreshAllCanvas();
 
   // Some layout changes requiring a new options instance?
   if (m_bneedNew) m_returnChanges |= NEED_NEW_OPTIONS;
@@ -7693,6 +7803,9 @@ void options::OnXidOkClick(wxCommandEvent& event) {
   if ((m_returnChanges & FONT_CHANGED) &&
       !(m_returnChanges & FONT_CHANGED_SAFE))
     gFrame->ScheduleDeleteSettingsDialog();
+
+  // And for locale change
+  if (m_returnChanges & LOCALE_CHANGED) gFrame->ScheduleDeleteSettingsDialog();
 
   Finish();
   Hide();
@@ -8149,6 +8262,12 @@ void options::OnCancelClick(wxCommandEvent& event) {
   pConfig->Write("OptionsSizeX", lastWindowSize.x);
   pConfig->Write("OptionsSizeY", lastWindowSize.y);
 
+#ifdef __ANDROID__
+  androidEnableBackButton(true);
+  androidEnableRotation();
+  androidEnableOptionItems(true);
+#endif
+
   Hide();
 }
 
@@ -8414,6 +8533,12 @@ void options::DoOnPageChange(size_t page) {
   if (1 == i) {  // 2 is the index of "Charts" page
     k_charts = VISIT_CHARTS;
     UpdateChartDirList();
+  }
+
+  else if (m_pageConnections == i) {
+    // Only required on some Windows hosts, but should not hurt. See #4570
+    wxWindow* w = m_pListbook->GetCurrentPage();
+    comm_dialog->OnResize(w ? w->GetClientSize() : wxSize());
   }
 
   else if (m_pageUI == i) {  // 5 is the index of "User Interface" page

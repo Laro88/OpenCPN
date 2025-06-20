@@ -25,3 +25,5 @@ the OpenCPN "main thingomobob" ocpn_app.h & cpp eventifies (EventifyWmsReqParam)
 Finally the WmsFframe (that has a handle to the primary ui) receives the event at set the coordinates and sizes etc. in a couple of calls in OnWmsRequestEvent
 Eventually the graphics is captured and returned to the WMS client consuming the image.
 
+Activity log:
+20250612 sync to OpenCPN, displaying 5.11, still pan + zoom problems + overzoom.

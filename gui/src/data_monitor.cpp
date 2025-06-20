@@ -122,7 +122,7 @@ static void AddVdrLogline(const Logline& ll, std::ostream& stream) {
   if (kSourceByBus.find(ll.navmsg->bus) == kSourceByBus.end()) return;
 
   using namespace std::chrono;
-  auto now = steady_clock::now();
+  auto now = system_clock::now();
   auto ms = duration_cast<milliseconds>(now.time_since_epoch()).count();
   stream << ms << ",";
 
@@ -273,45 +273,6 @@ private:
   std::function<void()> m_on_text_evt;
 };
 
-/** Button to start/stop logging. */
-class LogButton : public wxButton {
-public:
-  LogButton(wxWindow* parent, DataLogger& logger)
-      : wxButton(parent, wxID_ANY), is_logging(true), m_logger(logger) {
-    Bind(wxEVT_BUTTON, [&](wxCommandEvent&) { OnClick(); });
-    OnClick();
-    Disable();
-    Enable(false);
-    UpdateTooltip();
-  }
-
-  void UpdateTooltip() {
-    if (!IsThisEnabled())
-      SetToolTip(_("Set log file using menu to enable"));
-    else if (is_logging)
-      SetToolTip(_("Click to stop logging"));
-    else
-      SetToolTip(_("Click to start logging"));
-  }
-
-  bool Enable(bool enable) override {
-    bool result = wxWindow::Enable(enable);
-    UpdateTooltip();
-    return result;
-  }
-
-private:
-  bool is_logging;
-  DataLogger& m_logger;
-
-  void OnClick() {
-    is_logging = !is_logging;
-    SetLabel(is_logging ? _("Stop") : _("Start"));
-    UpdateTooltip();
-    m_logger.SetLogging(is_logging);
-  }
-};
-
 /** Offer user to select current filter. */
 class FilterChoice : public wxChoice {
 public:
@@ -320,7 +281,7 @@ public:
     SetName(kFilterChoiceName);
     Bind(wxEVT_CHOICE, [&](wxCommandEvent&) { OnChoice(); });
     OnFilterListChange();
-    int ix = FindString("Default settings");
+    int ix = FindString(kLabels.at("default"));
     if (ix != wxNOT_FOUND) SetSelection(ix);
     NavmsgFilter filter = filters_on_disk::Read("default.filter");
     m_tty_panel->SetFilter(filter);
@@ -382,6 +343,7 @@ private:
   const std::unordered_map<std::string, std::string> kLabels = {
       {"all-data", _("All data")},
       {"all-nmea", _("All NMEA data")},
+      {"default", _("Default settings")},
       {"malformed", _("Malformed messages")},
       {"nmea-input", _("NMEA input data")},
       {"nmea-output", _("NMEA output data")},
@@ -436,6 +398,22 @@ private:
     m_on_stop(is_paused);
     SetLabel(is_paused ? _("Resume") : _("Pause"));
   }
+};
+
+/** Button to hide data monitor, used only on Android. */
+class CloseButton : public wxButton {
+public:
+  CloseButton(wxWindow* parent, std::function<void()> on_close)
+      : wxButton(parent, wxID_ANY), m_on_close(std::move(on_close)) {
+    SetLabel(_("Close"));
+    Bind(wxEVT_BUTTON, [&](wxCommandEvent&) { OnClick(); });
+    OnClick();
+  }
+
+private:
+  std::function<void()> m_on_close;
+
+  void OnClick() { m_on_close(); }
 };
 
 /** Log setup window invoked from menu "Logging" item. */
@@ -530,7 +508,7 @@ public:
     auto buttons = new wxStdDialogButtonSizer();
     auto close_btn = new wxButton(this, wxID_CLOSE);
     close_btn->Bind(wxEVT_COMMAND_BUTTON_CLICKED,
-                    [&](wxCommandEvent& ev) { Destroy(); });
+                    [&](wxCommandEvent& ev) { EndModal(0); });
     buttons->AddButton(close_btn);
     buttons->Realize();
     buttons->Fit(parent);
@@ -560,12 +538,8 @@ public:
     kViewStdColors,
   };
 
-  TheMenu(wxWindow* parent, wxStaticText* log_label, DataLogger& logger,
-          wxWindow* log_button)
-      : m_parent(parent),
-        m_log_button(log_button),
-        m_logger(logger),
-        m_log_label(log_label) {
+  TheMenu(wxWindow* parent, DataLogger& logger)
+      : m_parent(parent), m_logger(logger) {
     AppendCheckItem(static_cast<int>(Id::kViewStdColors), _("Use colors"));
     Append(static_cast<int>(Id::kLogSetup), _("Logging..."));
     auto filters = new wxMenu("");
@@ -579,7 +553,7 @@ public:
     Bind(wxEVT_MENU, [&](wxCommandEvent& ev) {
       switch (static_cast<Id>(ev.GetId())) {
         case Id::kLogSetup:
-          LogSetup();
+          ConfigureLogging();
           break;
 
         case Id::kViewStdColors:
@@ -613,29 +587,29 @@ public:
     m_filter = filter;
   }
 
+  void ConfigureLogging() {
+    auto dlg = new LoggingSetup(
+        m_parent,
+        [&](DataLogger::Format f, std::string s) { SetLogFormat(f, s); },
+        m_logger);
+    dlg->ShowModal();
+    auto monitor = wxWindow::FindWindowByName(kDataMonitorWindowName);
+    assert(monitor);
+    monitor->Layout();
+  }
+
 private:
   wxMenuItem* AppendId(wxMenu* root, Id id, const wxString& label) {
     return root->Append(static_cast<int>(id), label);
   }
 
   void SetLogFormat(DataLogger::Format format, const std::string& label) {
-    m_log_label->SetLabel(_("Log type: ") + label);
     m_logger.SetFormat(format);
-    m_log_button->Enable();
     std::string extension =
         format == DataLogger::Format::kDefault ? ".log" : ".csv";
     fs::path path = m_logger.GetLogfile();
     path = path.parent_path() / (path.stem().string() + extension);
     m_logger.SetLogfile(path);
-  }
-
-  void LogSetup() {
-    auto dlg = new LoggingSetup(
-        m_parent,
-        [&](DataLogger::Format f, std::string s) { SetLogFormat(f, s); },
-        m_logger);
-    dlg->ShowModal();
-    m_parent->GetParent()->Layout();
   }
 
   void SetColor(int id) {
@@ -653,10 +627,47 @@ private:
   }
 
   wxWindow* m_parent;
-  wxWindow* m_log_button;
   DataLogger& m_logger;
-  wxStaticText* m_log_label;
   std::string m_filter;
+};
+
+/** Button to start/stop logging. */
+class LogButton : public wxButton {
+public:
+  LogButton(wxWindow* parent, DataLogger& logger, TheMenu& menu)
+      : wxButton(parent, wxID_ANY),
+        is_logging(true),
+        m_is_inited(false),
+        m_logger(logger),
+        m_menu(menu) {
+    Bind(wxEVT_BUTTON, [&](wxCommandEvent&) { OnClick(); });
+    OnClick(true);
+    UpdateTooltip();
+  }
+
+  void UpdateTooltip() {
+    if (is_logging)
+      SetToolTip(_("Click to stop logging"));
+    else
+      SetToolTip(_("Click to start logging"));
+  }
+
+private:
+  bool is_logging;
+  bool m_is_inited;
+  DataLogger& m_logger;
+  TheMenu& m_menu;
+
+  void OnClick(bool ctor = false) {
+    if (!m_is_inited && !ctor) {
+      m_menu.ConfigureLogging();
+      m_is_inited = true;
+    }
+    is_logging = !is_logging;
+    SetLabel(is_logging ? _("Stop logging") : _("Start logging"));
+    UpdateTooltip();
+    m_logger.SetLogging(is_logging);
+  }
 };
 
 /** Copy to clipboard button */
@@ -697,16 +708,15 @@ private:
 };
 
 /** Button invoking the popup menu. */
-class MenuButton : public wxButton {
+class MenuButton : public SvgButton {
 public:
   MenuButton(wxWindow* parent, TheMenu& menu,
              std::function<std::string()> get_current_filter)
-      : wxButton(parent, wxID_ANY, wxEmptyString, wxDefaultPosition,
-                 wxDefaultSize, wxBU_EXACTFIT),
+      : SvgButton(parent),
         m_menu(menu),
         m_get_current_filter(std::move(get_current_filter)) {
+    LoadIcon(kMenuSvg);
     Bind(wxEVT_BUTTON, [&](wxCommandEvent&) { OnClick(); });
-    SetLabel(kUtfIdenticalTo);
     SetToolTip(_("Open menu"));
   }
 
@@ -724,26 +734,23 @@ private:
 class StatusLine : public wxPanel {
 public:
   StatusLine(wxWindow* parent, wxWindow* quick_filter, TtyPanel* tty_panel,
-             std::function<void(bool)> on_stop, DataLogger& logger)
+             std::function<void(bool)> on_stop, std::function<void()> on_hide,
+             DataLogger& logger)
       : wxPanel(parent),
         m_is_resized(false),
-        m_log_button(new LogButton(this, logger)),
-        m_log_label(new wxStaticText(this, wxID_ANY, _("Logging: Default"))),
         m_filter_choice(new FilterChoice(this, tty_panel)),
-        m_menu(this, m_log_label, logger, m_log_button) {
+        m_menu(this, logger),
+        m_log_button(new LogButton(this, logger, m_menu)) {
     // Add a containing sizer for labels, so they can be aligned vertically
-    auto log_label_box = new wxBoxSizer(wxVERTICAL);
-    log_label_box->Add(m_log_label);
     auto filter_label_box = new wxBoxSizer(wxVERTICAL);
-    filter_label_box->Add(new wxStaticText(this, wxID_ANY, _("View")));
+    filter_label_box->Add(new wxStaticText(this, wxID_ANY, _("Filter")));
 
     auto flags = wxSizerFlags(0).Border();
     auto wbox = new wxWrapSizer(wxHORIZONTAL);
-    wbox->Add(log_label_box, flags.Align(wxALIGN_CENTER_VERTICAL));
     wbox->Add(m_log_button, flags);
     // Stretching horizontal space. Does not work with a WrapSizer, known
     // wx bug. Left in place if it becomes fixed.
-    wbox->Add(GetCharWidth() * 2, 0, 1);
+    wbox->Add(GetCharWidth() * 5, 0, 1);
     wbox->Add(filter_label_box, flags.Align(wxALIGN_CENTER_VERTICAL));
     wbox->Add(m_filter_choice, flags);
     wbox->Add(new PauseResumeButton(this, std::move(on_stop)), flags);
@@ -753,6 +760,9 @@ public:
     };
     wbox->Add(new CopyClipboardButton(this), flags);
     wbox->Add(new MenuButton(this, m_menu, get_current_filter), flags);
+#ifdef ANDROID
+    wbox->Add(new CloseButton(this, std::move(on_hide)), flags);
+#endif
     SetSizer(wbox);
     Layout();
     Show();
@@ -784,10 +794,9 @@ protected:
 
 private:
   bool m_is_resized;
-  wxButton* m_log_button;
-  wxStaticText* m_log_label;
   wxChoice* m_filter_choice;
   TheMenu m_menu;
+  wxButton* m_log_button;
 };
 
 DataLogger::DataLogger(wxWindow* parent, const fs::path& path)
@@ -796,7 +805,7 @@ DataLogger::DataLogger(wxWindow* parent, const fs::path& path)
       m_stream(path, std::ios_base::app),
       m_is_logging(false),
       m_format(Format::kDefault),
-      m_log_start(std::chrono::steady_clock::now()) {}
+      m_log_start(NavmsgClock::now()) {}
 
 DataLogger::DataLogger(wxWindow* parent) : DataLogger(parent, NullLogfile()) {}
 
@@ -850,8 +859,8 @@ void DataLogger::Add(const Logline& ll) {
 }
 
 DataMonitor::DataMonitor(wxWindow* parent)
-    : wxFrame(parent, wxID_ANY, "Data Monitor", wxDefaultPosition,
-              wxDefaultSize, wxDEFAULT_FRAME_STYLE | wxFRAME_FLOAT_ON_PARENT,
+    : wxFrame(parent, wxID_ANY, _("Data Monitor"), wxPoint(0, 0), wxDefaultSize,
+              wxDEFAULT_FRAME_STYLE | wxFRAME_FLOAT_ON_PARENT,
               kDataMonitorWindowName),
       m_monitor_src([&](const std::shared_ptr<const NavMsg>& navmsg) {
         auto msg = std::dynamic_pointer_cast<const Nmea0183Msg>(navmsg);
@@ -874,8 +883,9 @@ DataMonitor::DataMonitor(wxWindow* parent)
   vbox->Add(m_quick_filter, wxSizerFlags());
 
   auto on_stop = [&, tty_panel](bool stop) { tty_panel->OnStop(stop); };
-  auto status_line =
-      new StatusLine(this, m_quick_filter, tty_panel, on_stop, m_logger);
+  auto on_close = [&, this]() { this->OnHide(); };
+  auto status_line = new StatusLine(this, m_quick_filter, tty_panel, on_stop,
+                                    on_close, m_logger);
   vbox->Add(status_line, wxSizerFlags().Expand());
   SetSizer(vbox);
   Fit();
@@ -940,5 +950,7 @@ void DataMonitor::OnFilterApply(const std::string& name) {
   m_current_filter = name;
   filter_choice->OnApply(name);
 }
+
+void DataMonitor::OnHide() { Hide(); }
 
 #pragma clang diagnostic pop

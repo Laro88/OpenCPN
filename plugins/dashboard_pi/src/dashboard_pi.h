@@ -242,6 +242,7 @@ public:
   int GetToolbarItemId() { return m_toolbar_item_id; }
   int GetDashboardWindowShownCount();
   void SetPluginMessage(wxString &message_id, wxString &message_body);
+  void UpdateSumLog(bool);
 
 private:
   bool LoadConfig(void);
@@ -313,6 +314,7 @@ private:
   int mSatsInUse;
   int mSatsInView;
   double mHdm;
+
   /**
    * The current time in UTC.
    *
@@ -358,6 +360,9 @@ private:
 
   iirfilter mSOGFilter;
   iirfilter mCOGFilter;
+  iirfilter mAWSFilter;
+  iirfilter mAWAFilter;
+
   // protected:
   //      DECLARE_EVENT_TABLE();
 };
@@ -379,6 +384,7 @@ public:
   void OnInstrumentUp(wxCommandEvent &event);
   void OnInstrumentDown(wxCommandEvent &event);
   void OnDashboarddefaultFont(wxCommandEvent &event);
+  void OnDistanceUnitSelect(wxCommandEvent &event);
   void SaveDashboardConfig();
   void RecalculateSize(void);
 
@@ -390,12 +396,17 @@ public:
   wxSpinCtrl *m_pSpinSpeedMax;
   wxSpinCtrl *m_pSpinCOGDamp;
   wxSpinCtrl *m_pSpinSOGDamp;
+  wxSpinCtrl *m_pSpinAWSDamp;
+  wxSpinCtrl *m_pSpinAWADamp;
   wxChoice *m_pChoiceUTCOffset;
   wxChoice *m_pChoiceSpeedUnit;
   wxChoice *m_pChoiceDepthUnit;
   wxSpinCtrlDouble *m_pSpinDBTOffset;
   wxChoice *m_pChoiceDistanceUnit;
   wxChoice *m_pChoiceWindSpeedUnit;
+  wxCheckBox *m_pUseInternSumLog;
+  wxStaticText *m_SumLogUnit;
+  wxTextCtrl *m_pSumLogValue;
   wxCheckBox *m_pUseTrueWinddata;
   wxChoice *m_pChoiceTempUnit;
 

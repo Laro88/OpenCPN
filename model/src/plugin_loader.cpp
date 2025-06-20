@@ -116,7 +116,7 @@ static bool IsSystemPluginName(const std::string& name) {
 
 /** Return version string from installation or as fallback API data */
 static std::string GetInstalledVersion(const PlugInData& pd) {
-  std::string path = PluginHandler::versionPath(pd.m_common_name.ToStdString());
+  std::string path = PluginHandler::VersionPath(pd.m_common_name.ToStdString());
   if (path == "" || !wxFileName::IsFileReadable(path)) {
     auto loader = PluginLoader::GetInstance();
     auto pic = GetContainer(pd, *loader->GetPlugInArray());
@@ -136,7 +136,7 @@ static std::string GetInstalledVersion(const PlugInData& pd) {
 
 /** Return metadata corresponding to a PlugInContainer. */
 static PluginMetadata CreateMetadata(const PlugInContainer* pic) {
-  auto catalogHdlr = CatalogHandler::getInstance();
+  auto catalogHdlr = CatalogHandler::GetInstance();
 
   PluginMetadata mdata;
   mdata.name = pic->m_common_name.ToStdString();
@@ -162,14 +162,26 @@ static fs::path LoadStampPath(const std::string& file_path) {
   return path.parent_path() / path.stem();
 }
 
+/** Create a load stamp which marks filename as "load started" */
 static void CreateLoadStamp(const std::string& filename) {
   std::ofstream(LoadStampPath(filename).string());
 }
 
+/**
+ * Check if a load stamp exists for given file. If a load stamp exists
+ * when opencpn is started it means that the attempt to load the file
+ * on previous start failed.
+ * @param filename Base name without directory.
+ * @return true if load stamp exists
+ */
 static bool HasLoadStamp(const std::string& filename) {
   return exists(LoadStampPath(filename));
 }
 
+/**
+ * Remove a load stamp i. e., mark the file as successfully loaded.
+ * @param filename  Basename of file without directory part.
+ */
 static void ClearLoadStamp(const std::string& filename) {
   if (filename.empty()) return;
   auto path = LoadStampPath(filename);
@@ -270,7 +282,7 @@ static void setLoadPath() {
   using namespace std;
 
   auto const osSystemId = wxPlatformInfo::Get().GetOperatingSystemId();
-  auto dirs = PluginPaths::getInstance()->Libdirs();
+  auto dirs = PluginPaths::GetInstance()->Libdirs();
   if (osSystemId & wxOS_UNIX_LINUX) {
     string path = ocpn::join(dirs, ':');
     wxString envPath;
@@ -304,7 +316,7 @@ static void setLoadPath() {
       wxLogWarning("SetLoadPath: Unsupported platform.");
   }
   if (osSystemId & wxOS_MAC || osSystemId & wxOS_UNIX_LINUX) {
-    dirs = PluginPaths::getInstance()->Bindirs();
+    dirs = PluginPaths::GetInstance()->Bindirs();
     string path = ocpn::join(dirs, ':');
     wxString envPath;
     wxGetEnv("PATH", &envPath);
@@ -455,7 +467,7 @@ bool PluginLoader::LoadAllPlugIns(bool load_enabled, bool keep_orphans) {
   using namespace std;
 
   static const wxString sep = wxFileName::GetPathSeparator();
-  vector<string> dirs = PluginPaths::getInstance()->Libdirs();
+  vector<string> dirs = PluginPaths::GetInstance()->Libdirs();
   wxLogMessage("PluginLoader: loading plugins from %s", ocpn::join(dirs, ';'));
   setLoadPath();
   bool any_dir_loaded = false;
@@ -624,7 +636,7 @@ bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
       wxLog::FlushActive();
 
       std::string found_version;
-      for (const auto& p : PluginHandler::getInstance()->getInstalled()) {
+      for (const auto& p : PluginHandler::GetInstance()->GetInstalled()) {
         if (ocpn::tolower(p.name) == pic->m_common_name.Lower()) {
           found_version = p.readonly ? "" : p.version;
           break;
@@ -658,7 +670,7 @@ bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
       bool is_system = found != SYSTEM_PLUGINS.end();
 
       if (!is_system) {
-        auto available = PluginHandler::getInstance()->getCompatiblePlugins();
+        auto available = PluginHandler::GetInstance()->getCompatiblePlugins();
         wxString name = pic->m_common_name;
         auto it = find_if(
             available.begin(), available.end(),
@@ -670,7 +682,7 @@ bool PluginLoader::LoadPluginCandidate(const wxString& file_name,
           // to satisfy minimal PIM functionality
 
           auto oprhan_metadata = CreateMetadata(pic);
-          auto catalogHdlr = CatalogHandler::getInstance();
+          auto catalogHdlr = CatalogHandler::GetInstance();
           catalogHdlr->AddMetadataToActiveContext(oprhan_metadata);
         }
       }
@@ -882,7 +894,7 @@ bool PluginLoader::UnLoadPlugIn(size_t ix) {
 
 static std::string VersionFromManifest(const std::string& plugin_name) {
   std::string version;
-  std::string path = PluginHandler::versionPath(plugin_name);
+  std::string path = PluginHandler::VersionPath(plugin_name);
   if (!path.empty() && wxFileName::IsFileReadable(path)) {
     std::ifstream stream;
     stream.open(path, std::ifstream::in);
@@ -907,7 +919,7 @@ PluginMetadata PluginLoader::MetadataByName(const std::string& name) {
     return pd;
   }
 
-  auto available = PluginHandler::getInstance()->getCompatiblePlugins();
+  auto available = PluginHandler::GetInstance()->getCompatiblePlugins();
   vector<PluginMetadata> matches;
   copy_if(available.begin(), available.end(), back_inserter(matches),
           [name](const PluginMetadata& md) { return md.name == name; });
@@ -984,7 +996,7 @@ void PluginLoader::UpdateManagedPlugins(bool keep_orphans) {
       md.is_imported = isRegularFile(import_path.c_str());
       if (md.is_imported) {
         plugin->m_status = PluginStatus::Imported;
-      } else if (isRegularFile(PluginHandler::fileListPath(md.name).c_str())) {
+      } else if (isRegularFile(PluginHandler::FileListPath(md.name).c_str())) {
         // This is an installed plugin
         PluginLoader::UpdatePlugin(plugin, md);
       } else if (IsSystemPluginName(md.name)) {

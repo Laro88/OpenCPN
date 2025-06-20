@@ -304,9 +304,11 @@ CommDriverN2KSerial::CommDriverN2KSerial(const ConnectionParams* params,
 CommDriverN2KSerial::~CommDriverN2KSerial() { Close(); }
 
 DriverStats CommDriverN2KSerial::GetDriverStats() const {
+#ifndef ANDROID
   if (m_pSecondary_Thread)
     return m_pSecondary_Thread->GetStats();
   else
+#endif
     return m_driver_stats;
 }
 
@@ -330,6 +332,8 @@ bool CommDriverN2KSerial::Open() {
 void CommDriverN2KSerial::Close() {
   wxLogMessage(
       wxString::Format(_T("Closing N2K Driver %s"), m_portstring.c_str()));
+
+  m_stats_timer.Stop();
 
   //    Kill off the Secondary RX Thread if alive
   if (m_pSecondary_Thread) {
