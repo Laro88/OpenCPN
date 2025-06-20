@@ -2308,6 +2308,9 @@ void MyFrame::ODoSetSize(void) {
   }
 
 #endif
+  if (GetPrimaryCanvas() && GetPrimaryCanvas()->GetNotificationsList()) {
+    GetPrimaryCanvas()->GetNotificationsList()->RecalculateSize();
+  }
 
   if (g_pauimgr) g_pauimgr->Update();
 }
@@ -4847,18 +4850,13 @@ void MyFrame::OnInitTimer(wxTimerEvent &event) {
         g_MainToolbar->SetAutoHideTimer(g_nAutoHideToolbar);
       }
 
-#if 0  // per-canvas toolbars deprecated in MUI
-
-            // .. for each canvas...
-            for(unsigned int i=0 ; i < g_canvasArray.GetCount() ; i++){
-                ChartCanvas *cc = g_canvasArray.Item(i);
-                cc->RequestNewCanvasToolbar( true );
-
-                if(cc && cc->GetToolbarEnable()){
-                    cc->GetToolbar()->SetAutoHide(g_bAutoHideToolbar);
-                    cc->GetToolbar()->SetAutoHideTimer(g_nAutoHideToolbar);
-                }
-            }
+#ifdef ANDROID
+      if (g_MainToolbar)
+        m_data_monitor->Move(g_MainToolbar->GetToolbarRect().x +
+                                 g_MainToolbar->GetToolbarRect().width,
+                             3 * GetCharHeight());
+#else
+      m_data_monitor->Center();
 #endif
 
       break;

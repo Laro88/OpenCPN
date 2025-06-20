@@ -466,6 +466,7 @@ if (QT_ANDROID)
   )
   set(LUNASVG_BUILD_EXAMPLES OFF CACHE INTERNAL "Enable lunasvg samples")
   set(PLUTOVG_BUILD_EXAMPLES OFF CACHE INTERNAL "Enable plutovg samples")
+  set( CMAKE_SIZEOF_VOID_P 32 )
 
   FetchContent_MakeAvailable(lunasvg)
   include_directories("${CMAKE_CURRENT_BINARY_DIR}/_deps/lunasvg-src/include")
@@ -1141,7 +1142,13 @@ if (APPLE)
 endif ()
 
 find_package(Gettext REQUIRED)
-
+if (LINUX)
+  find_package(LIBUDEV)
+  if (LIBUDEV_FOUND)
+    target_link_libraries(${PACKAGE_NAME} INTERFACE ocpn::libudev)
+    set(HAVE_LIBUDEV 1)
+  endif ()
+endif ()
 
 add_subdirectory(libs/ssl_sha1)
 target_link_libraries(${PACKAGE_NAME} PRIVATE ssl::sha1)
