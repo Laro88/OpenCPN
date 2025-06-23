@@ -54,6 +54,11 @@ inline std::string HttpVarToString(const struct mg_str& query,
   std::string string;
   struct mg_str mgs = mg_http_var(query, mg_str(var));
   if (mgs.len && mgs.ptr) string = std::string(mgs.ptr, mgs.len);
+
+  for (auto& c : string) {
+    c = tolower(c);
+  }
+
   return string;
 }
 
@@ -95,89 +100,158 @@ static void fn(struct mg_connection* c, int ev, void* ev_data, void* fn_data) {
           return;
         }
 
+        std::string s = "wms req:" + std::string(hm->query.ptr, hm->query.len);
+        DEBUG_LOG << s.c_str();
+
         std::string strService = HttpVarToString(hm->query, "service");
+        std::string strVersion = HttpVarToString(hm->query, "version");
         std::string strRequest = HttpVarToString(hm->query, "request");
-        std::string strFormat = HttpVarToString(hm->query, "format");
-        std::string strWidthPx = HttpVarToString(hm->query, "width");
-        std::string strHeightPx = HttpVarToString(hm->query, "height");
-        std::string strSrs = HttpVarToString(hm->query, "srs");
-        std::string strBbox = HttpVarToString(hm->query, "bbox");
-        std::string strColor = HttpVarToString(hm->query, "color");
 
-        strBbox = unescape(strBbox);
-        strSrs = unescape(strSrs);
+        // if a getcapabilities then process rapidly
+        if (strRequest == "getcapabilities") {
+          std::stringstream ss;
+          ss << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+          ss << "<WMS_Capabilities version=\"1.1.1\">\n";
+          ss << "<Service>\n";
+          ss << "<Name>OGC:WMS</Name>\n";
+          ss << "<Abstract>OpenCPN based Navigational Chart rendering "
+                "engine</Abstract>\n";
+          ss << "<Keywords>S57 OpenCPN WMS</Keywords>\n";
+          ss << "<OnlineResource>https://github.com/Laro88/OpenCPN</"
+                "OnlineResource>\n";
+          ss << "<ContactInformation>github "
+                "Laro88/OpenCPN</ContactInformation>\n";
+          ss << "<Title>Using the awesome OpenCPN chartplotter with extensions "
+                "to enable WMS rendering</Title>\n";
+          ss << "</Service>\n";
 
-        // check for resizing
-        int _w = std::stoi(strWidthPx);
-        int _h = std::stoi(strHeightPx);
-        if (_w != RestServerWms::lastSize_W ||
-            _h != RestServerWms::lastSize_H) {
-          INFO_LOG << "Size req change  from (w,h)" << RestServerWms::lastSize_W
-                   << ", " << RestServerWms::lastSize_H << " to " << _w << ", "
-                   << _h;
+          ss << "<Capability>\n";
+          ss << "<Request>\n";
+          ss << "<GetCapabilities>\n<Format>application/vnd.ogc.wms_xml";
+          ss << "</Format>\n";
+          ss << "<DCPType><HTTP><GET>";
+          // ss << "<OnlineResource
+          // xlink:href=\"http://hamster.com/xlink/\"/>\n";
+          ss << "<OnlineResource xmlns:xlink=\"http://www.w3.org/1999/xlink\" "
+                "xlink:type=\"simple\" "
+                "xlink:href=\"http://localhost:8091/api/wms\"/>\n";
 
-          RestServerWms::lastSize_W = _w;
-          RestServerWms::lastSize_H = _h;
-        }
+          ss << "</GET>\n</HTTP>\n</DCPType>\n";
+          ss << "</GetCapabilities>\n";
+          ss << "<GetMap>\n<Format>image/jpg</"
+                "Format>\n<DCPType>\n<HTTP>\n<Get>\n";
+          //<OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink"
+          // xlink:type="simple"
+          // xlink:href="http://geoint.lmic.state.mn.us/cgi-bin/mncomp"/>
+          ss << "<OnlineResource xmlns:xlink=\"http://www.w3.org/1999/xlink\" "
+                "xlink:type=\"simple\" "
+                "xlink:href=\"http://localhost:8091/api/wms\"/>\n";
+          // ss << "<OnlineResource xlink:href=\"http://example.com/wms?\"/>\n";
+          ss << "</Get>\n</HTTP>\n</DCPType>\n</GetMap>\n";
+          ss << "</Request>\n";
 
-        // BBox manging
-        std::stringstream ss(strBbox);
-        std::vector<double> data;
+          ss << "<Layer>\n";
+          ss << "<Title>OpenCPN NAV layer</Title>\n";
+          ss << "<Abstract>Navigational layer</Abstract>\n";
+          ss << "<Name>NAV</Name>\n";
+          ss << "<SRS>EPSG:3857</SRS>\n";
+          ss << "<SRS>EPSG:4326</SRS>\n";
+          ss << "<Format>image/jpeg</Format>\n";
+          ss << "<Format>image/jpg</Format>\n";
+          ss << "<BoundingBox SRS=\"EPSG:4326\" minx=\"-180.0\" "
+                "miny=\"-90.0\" maxx=\"180.0\" maxy=\"90.0\"/>";
+          ss << "</Layer>\n";
+          ss << "</Capability>\n";
+          ss << "</WMS_Capabilities>\n";
 
-        while (ss.good()) {
-          std::string substr;
-          getline(ss, substr, ',');
-          double d = std::stod(substr);
-          // bbox_split += substr + "\n";
-
-          data.push_back(d);
-        }
-
-        if (data.size() != 4) {
-          mg_http_reply(
-              c, 422, "",
-              "Unable to continue, bbox data not having mandatory in 4 params");
+          mg_http_reply(c, 200, NULL, ss.str().c_str());
           return;
+        } else if (strRequest == "getmap") {
+          // regular map request (TODO check request = map / getmap / ??
+          std::string strFormat = HttpVarToString(hm->query, "format");
+          std::string strWidthPx = HttpVarToString(hm->query, "width");
+          std::string strHeightPx = HttpVarToString(hm->query, "height");
+          std::string strSrs = HttpVarToString(hm->query, "srs");
+          std::string strBbox = HttpVarToString(hm->query, "bbox");
+          std::string strColor = HttpVarToString(hm->query, "color");
+
+          strBbox = unescape(strBbox);
+          strSrs = unescape(strSrs);
+
+          // check for resizing
+          int _w = std::stoi(strWidthPx);
+          int _h = std::stoi(strHeightPx);
+          if (_w != RestServerWms::lastSize_W ||
+              _h != RestServerWms::lastSize_H) {
+            INFO_LOG << "Size req change  from (w,h)"
+                     << RestServerWms::lastSize_W << ", "
+                     << RestServerWms::lastSize_H << " to " << _w << ", " << _h;
+
+            RestServerWms::lastSize_W = _w;
+            RestServerWms::lastSize_H = _h;
+          }
+
+          // BBox manging
+          std::stringstream ss(strBbox);
+          std::vector<double> data;
+
+          while (ss.good()) {
+            std::string substr;
+            getline(ss, substr, ',');
+            double d = std::stod(substr);
+            // bbox_split += substr + "\n";
+
+            data.push_back(d);
+          }
+
+          if (data.size() != 4) {
+            mg_http_reply(c, 422, "",
+                          "Unable to continue, bbox data not having mandatory "
+                          "in 4 params");
+            return;
+          }
+
+          double lonSW, latSW, lonNE, latNE;
+
+          if (strSrs == "epsg:4326") {
+            latSW = data[0];
+            lonSW = data[1];
+            latNE = data[2];
+            lonNE = data[3];
+
+          } else if (strSrs == "epsg:3857") {
+            // coord convertion
+            coord3857To4326(data[0], data[1], lonSW, latSW);
+            coord3857To4326(data[2], data[3], lonNE, latNE);
+          } else {
+            std::string err = "Unsupported Srs param:" + strSrs;
+
+            mg_http_reply(c, 422, "", err.c_str());
+
+            return;
+          }
+
+          INFO_LOG << "WMS req " << RestServerWms::m_hitcount << " SW:" << latSW
+                   << "," << lonSW << " NE" << latNE << "," << lonNE
+                   << "(lat, lon)";
+
+          WmsReqParams p;
+          p.w = _w;
+          p.h = _h;
+          p.latNE = latNE;
+          p.lonNE = lonNE;
+          p.latSW = latSW;
+          p.lonSW = lonSW;
+          p.hitcount = RestServerWms::m_hitcount;
+
+          p.color = strColor;  // DAY" "DUSK" "NIGHT"
+
+          p.c = c;
+
+          RestServerWms::fCallback(p);
+        } else {  // final processing of unsupported request
+          mg_http_reply(c, 400, NULL, "service not handled / unknown");
         }
-
-        double lonSW, latSW, lonNE, latNE;
-
-        if (strSrs == "EPSG:4326") {
-          latSW = data[0];
-          lonSW = data[1];
-          latNE = data[2];
-          lonNE = data[3];
-
-        } else if (strSrs == "EPSG:3857") {
-          // coord convertion
-          coord3857To4326(data[0], data[1], lonSW, latSW);
-          coord3857To4326(data[2], data[3], lonNE, latNE);
-        } else {
-          std::string err = "Unsupported Srs param:" + strSrs;
-
-          mg_http_reply(c, 422, "", err.c_str());
-
-          return;
-        }
-
-        INFO_LOG << "WMS req " << RestServerWms::m_hitcount << " SW:" << latSW
-                 << "," << lonSW << " NE" << latNE << "," << lonNE
-                 << "(lat, lon)";
-
-        WmsReqParams p;
-        p.w = _w;
-        p.h = _h;
-        p.latNE = latNE;
-        p.lonNE = lonNE;
-        p.latSW = latSW;
-        p.lonSW = lonSW;
-        p.hitcount = RestServerWms::m_hitcount;
-
-        p.color = strColor;  // DAY" "DUSK" "NIGHT"
-
-        p.c = c;
-
-        RestServerWms::fCallback(p);
       } catch (const std::exception& ex) {
         int j = 0;
         ERROR_LOG << "std::exception in rendering, details:" << ex.what();
