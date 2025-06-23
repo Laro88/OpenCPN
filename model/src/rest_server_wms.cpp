@@ -167,6 +167,7 @@ static void fn(struct mg_connection* c, int ev, void* ev_data, void* fn_data) {
           mg_http_reply(c, 200, NULL, ss.str().c_str());
           return;
         } else if (strRequest == "getmap") {
+          DEBUG_LOG << "getmap called" << std::endl;
           // regular map request (TODO check request = map / getmap / ??
           std::string strFormat = HttpVarToString(hm->query, "format");
           std::string strWidthPx = HttpVarToString(hm->query, "width");
@@ -248,15 +249,14 @@ static void fn(struct mg_connection* c, int ev, void* ev_data, void* fn_data) {
 
           p.c = c;
 
+          DEBUG_LOG << "GetMap passing data on to callback" << std::endl;
           RestServerWms::fCallback(p);
         } else {  // final processing of unsupported request
           mg_http_reply(c, 400, NULL, "service not handled / unknown");
         }
       } catch (const std::exception& ex) {
-        int j = 0;
         ERROR_LOG << "std::exception in rendering, details:" << ex.what();
       } catch (...) {
-        int j = 0;
         ERROR_LOG << "... exception in rendering";
       }
     } else {

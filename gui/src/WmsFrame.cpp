@@ -51,7 +51,7 @@ void WmsFrame::OnWmsRequestEvent(wxWMSRequestEvent& event) {
     // All the real work is done in here:
     // 1. resize if needed
     // 2. color change if needed
-    wxLogMessage("wxWMSRequestEvent event received");
+    DEBUG_LOG << "wxWMSRequestEvent event received" << std::endl;
 
     bool changeSize = false;
 
@@ -75,7 +75,8 @@ void WmsFrame::OnWmsRequestEvent(wxWMSRequestEvent& event) {
     if (changeSize) {
       lastSize_W = event.p.w;
       lastSize_H = event.p.h;
-      wxLogMessage("dimension change req to w:%i h:%i", event.p.w, event.p.h);
+      DEBUG_LOG << "dimension change req to w:" << event.p.w
+                << " h:" << event.p.h << std::endl;
       m_pTgtFrame->SetSize(newChartW + 300, newChartH + 300);
       m_pChartCanvas->SetSize(wxSize(newChartW, newChartH));
     }
@@ -192,7 +193,7 @@ void WmsFrame::OnWmsRequestEvent(wxWMSRequestEvent& event) {
 
     INFO_LOG << "WMS replied to hit:" << event.p.hitcount << " size:" << size;
   } catch (const std::exception& ex) {
-    wxLogError(ex.what());
+    ERROR_LOG << ex.what() << std::endl;
   } catch (...) {
     ERROR_LOG << "... exception (unhandled) - critical problem somewhere";
   }
