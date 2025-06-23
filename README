@@ -7,13 +7,13 @@ Work in progress!
 
 Testing with a to engines running in Chrome using Leaflet and OpenLayers as clients and a set of S-57 charts.
 
-There is a test html in the wms folder of the project. It is using Santa Catalina Island as a reference, US charts US5CA76M, US4CA60M and US3CA70M should do, available from NOAA.
+There is a test html in the wms folder of the project. It is using Santa Catalina Island and some areas in DK as a reference, US charts US5CA76M, US4CA60M and US3CA70M should do for Santa Catalina, available from NOAA.
 
 
 Known Problems:
 Small images not rendered properly (messing up scaling)
-Zoom causes crashes
-Coordinates will be messed up slightly
+Rapid zoom causes crashes
+Unless large pixel areas are requested then the returned charts are messed up
 
 Sidenote:
 Could be used for rendering a "view only" set for low power up devices, might try to do that on a small esp32 based 4" thing if I get bored. Just another layer.
@@ -27,3 +27,4 @@ Eventually the graphics is captured and returned to the WMS client consuming the
 
 Activity log:
 20250612 sync to OpenCPN, displaying 5.11, still pan + zoom problems + overzoom.
+20250623 Updated, WMS GetCapabilities is accepted by QGIS 3.40.7, the rest server crashes and QGIS slices the chart in a way that OpenCPN does not like.
